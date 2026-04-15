@@ -1,0 +1,14 @@
+**/target
+*.log
+
+*.ignore.*
+*.diff.*
+diff
+
+__pycache__
+
+local.env
+
+# Nix
+/result
+.direnv/

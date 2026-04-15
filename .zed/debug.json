@@ -1,0 +1,29 @@
+// Project-local debug tasks
+//
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+    "label": "Debug game",
+    "adapter": "CodeLLDB",
+    "build": {
+      "command": "just",
+      "args": ["build"],
+    },
+    "sourceLanguages": ["rust"],
+  },
+  {
+    "label": "Debug example - q_term::minimal",
+    "adapter": "CodeLLDB",
+    "build": {
+      "command": "just",
+      "args": ["build", "-p", "q_term", "--example", "minimal"],
+    },
+    "sourceLanguages": ["rust"],
+    "env": {
+      "RUST_LOG": "q_term=trace",
+    },
+    "program": "target/debug/examples/minimal",
+    "request": "launch",
+  },
+]

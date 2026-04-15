@@ -1,0 +1,93 @@
+name: Generate codecov
+
+on:
+  push:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: -Zcodegen-backend=llvm
+  RUSTC_WRAPPER: sccache
+
+jobs:
+  generate-coverage:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [q_screens, q_term, q_test_harness]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Cache Nix store
+        uses: actions/cache@v4
+        with:
+          path: /tmp/nix-cache
+          key: nix-coverage-${{ matrix.package }}-${{ hashFiles('flake.lock') }}
+          restore-keys: nix-coverage-${{ matrix.package }}-
+
+      - name: Import Nix cache
+        run: |
+          if [ -f /tmp/nix-cache/archive.nar ]; then
+            nix-store --import < /tmp/nix-cache/archive.nar || true
+          fi
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{matrix.package}}-ci-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        if: ${{contains(env.RUSTC_WRAPPER, 'sccache')}}
+
+      - name: Install dependencies
+        shell: bash
+        run: >
+          sudo apt-get update;
+          sudo apt-get install -y --no-install-recommends
+          libasound2-dev
+          libudev-dev
+          libwayland-dev
+          ;
+
+      - name: Collect coverage data
+        run: >
+          nix develop --command bash -c
+          "cargo llvm-cov nextest --manifest-path=./workspace/Cargo.toml
+          -p ${{ matrix.package }} --lcov --output-path report.lcov"
+
+      - name: Upload to coveralls
+        uses: coverallsapp/github-action@v2.3.6
+        with:
+          parallel: true
+          flag-name: ${{matrix.package}}
+
+      - name: Export Nix cache
+        if: always()
+        run: |
+          mkdir -p /tmp/nix-cache
+          nix-store --export $(nix-store -qR $(nix develop --command bash -c 'echo $buildInputs $nativeBuildInputs' 2>/dev/null) 2>/dev/null) > /tmp/nix-cache/archive.nar 2>/dev/null || true
+
+  finish:
+    runs-on: ubuntu-latest
+    needs: generate-coverage
+    if: ${{always()}}
+    steps:
+      - name: Finish coveralls upload
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true
+          carryforward: "q_screens,q_term,q_test_harness" # MUST MATCH ALL MATRIX VALUES

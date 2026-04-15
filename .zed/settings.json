@@ -1,0 +1,25 @@
+{
+    "lsp": {
+        "rust-analyzer": {
+            "initialization_options": {
+                "cargo": {
+                    "features": "all"
+                },
+                "check": {
+                    "overrideCommand": [
+                        "bash",
+                        "-c",
+                        "\"$(git rev-parse --show-toplevel)\"/scripts/ra-check.sh"
+                    ],
+                    "features": "all",
+                    "workspace": false
+                }
+            }
+        }
+    },
+    "languages": {
+        "Python": {
+            "language_servers": ["ruff", "basedpyright"]
+        }
+    }
+}
