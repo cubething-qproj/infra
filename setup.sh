@@ -28,7 +28,7 @@ done
 # Create root-level symlinks
 echo ""
 echo "Creating root symlinks..."
-for f in Cargo.toml Cargo.lock; do
+for f in Cargo.toml Cargo.lock justfile; do
 	link="$ROOT/$f"
 	target="infra/main/$f"
 	if [ -L "$link" ]; then

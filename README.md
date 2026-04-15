@@ -21,7 +21,7 @@ workspace config, Nix flake, CI, and dev tooling.
 ```
 
 This clones all sibling repos, sets up bare-repo + worktree layouts, and
-creates root-level symlinks for `Cargo.toml`, `Cargo.lock`, and `.envrc`.
+creates root-level symlinks for `Cargo.toml`, `Cargo.lock`, `.envrc`, and `justfile`. This project is designed so that you can have all the repositories checked simultaneously, as work on one will likely affect work on another.
 
 ## Compatibility
 
