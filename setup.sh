@@ -28,9 +28,10 @@ done
 # Create active symlinks (default to main)
 for repo in "${REPOS[@]}"; do
 	link="$ROOT/$repo/active"
-	if [ -L "$link" ]; then
+	if [ -L "$link" ] && [ -e "$link" ]; then
 		echo "✓ $repo/active symlink exists"
 	else
+		[ -L "$link" ] && rm "$link" # remove dangling symlink
 		ln -s main "$link"
 		echo "✓ $repo/active symlink created"
 	fi

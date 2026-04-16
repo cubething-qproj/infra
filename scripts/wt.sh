@@ -22,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 CRATE_REPOS=(quell q_screens q_term q_test_harness)
+RESERVED_BRANCHES=(main active)
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -31,7 +32,9 @@ usage() {
 
 		Commands:
 		  add <repo> <branch>   Create worktree and switch active symlink
-		  rm  <repo> <branch>   Remove worktree (refuses to remove main)
+		                        (branch is created from current active HEAD
+		                        if it doesn't exist yet)
+		  rm  <repo> <branch>   Remove worktree (refuses main/active)
 		  ls  [repo]            List worktrees (all repos if none specified)
 		  status                Show active symlink targets
 	EOF
@@ -50,6 +53,16 @@ validate_repo() {
 	exit 1
 }
 
+is_reserved_branch() {
+	local branch="$1"
+	for r in "${RESERVED_BRANCHES[@]}"; do
+		if [[ "$r" == "$branch" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 # ── commands ─────────────────────────────────────────────────────────
 
 cmd_add() {
@@ -62,19 +75,29 @@ cmd_add() {
 	local branch="$2"
 	validate_repo "$repo"
 
+	if is_reserved_branch "$branch"; then
+		echo "error: '$branch' is a reserved name and cannot be used as a worktree branch"
+		exit 1
+	fi
+
 	local repo_dir="$ROOT/$repo"
+
+	# Early exit if already active
+	local current_target
+	current_target="$(readlink "$repo_dir/active")"
+	if [[ "$current_target" == "$branch" ]]; then
+		echo "✓ $repo/active already points to '$branch'"
+		return 0
+	fi
 
 	# Create branch if it doesn't exist
 	if ! git -C "$repo_dir" rev-parse --verify "$branch" &>/dev/null; then
-		# Get the current active worktree's HEAD as the base
-		local active_target
-		active_target="$(readlink "$repo_dir/active")"
-		echo "Creating branch '$branch' from '$active_target'..."
-		git -C "$repo_dir/$active_target" branch "$branch"
+		echo "Creating branch '$branch' from '$current_target' HEAD..."
+		git -C "$repo_dir/$current_target" branch "$branch"
 	fi
 
-	# Create worktree if it doesn't exist
-	if [[ ! -d "$repo_dir/$branch" ]]; then
+	# Create worktree if it doesn't exist (check real dir, not symlink)
+	if [[ ! -d "$repo_dir/$branch" ]] || [[ -L "$repo_dir/$branch" ]]; then
 		echo "Creating worktree '$repo/$branch'..."
 		git -C "$repo_dir" worktree add "$branch" "$branch"
 	fi
@@ -101,8 +124,8 @@ cmd_rm() {
 	local branch="$2"
 	validate_repo "$repo"
 
-	if [[ "$branch" == "main" ]]; then
-		echo "error: refusing to remove the 'main' worktree"
+	if is_reserved_branch "$branch"; then
+		echo "error: refusing to remove reserved branch '$branch'"
 		exit 1
 	fi
 
@@ -111,15 +134,25 @@ cmd_rm() {
 	# If active points to this branch, switch back to main first
 	local active_target
 	active_target="$(readlink "$repo_dir/active")"
+	local needs_restore=false
 	if [[ "$active_target" == "$branch" ]]; then
 		echo "Switching $repo/active back to main..."
 		ln -sfn main "$repo_dir/active"
 		echo "✓ $repo/active → main"
+		needs_restore=true
 	fi
 
 	# Remove the worktree
 	if [[ -d "$repo_dir/$branch" ]]; then
-		git -C "$repo_dir" worktree remove "$branch"
+		if ! git -C "$repo_dir" worktree remove "$branch"; then
+			# Restore symlink if removal failed and we changed it
+			if [[ "$needs_restore" == true ]]; then
+				ln -sfn "$branch" "$repo_dir/active"
+				echo "✗ restored $repo/active → $branch (worktree removal failed)"
+			fi
+			echo "error: failed to remove worktree (dirty tree?). Use 'git worktree remove --force' manually."
+			exit 1
+		fi
 		echo "✓ $repo/$branch worktree removed"
 	else
 		echo "$repo/$branch does not exist"
