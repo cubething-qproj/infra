@@ -40,15 +40,11 @@ done
 # Create root-level symlinks
 echo ""
 echo "Creating root symlinks..."
-for f in Cargo.toml Cargo.lock justfile; do
+for f in Cargo.toml Cargo.lock justfile .cargo .config .zed; do
 	link="$ROOT/$f"
 	target="infra/main/$f"
-	if [ -L "$link" ]; then
-		echo "✓ $f symlink exists"
-	else
-		ln -s "$target" "$link"
-		echo "✓ $f symlink created"
-	fi
+	ln -s "$target" "$link"
+	echo "✓ $f symlink created"
 done
 
 # Create root .envrc if missing
