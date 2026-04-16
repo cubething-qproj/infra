@@ -67,6 +67,39 @@ is_reserved_branch() {
 	return 1
 }
 
+# Fetch the repo and warn if a branch is behind its upstream.
+# Usage: fetch_and_warn <repo_dir> <branch>
+# Non-fatal — always returns 0. Prints a warning if behind.
+fetch_and_warn() {
+	local repo_dir="$1"
+	local branch="$2"
+
+	echo "Fetching $repo_dir..."
+	if ! git -C "$repo_dir" fetch --quiet 2>/dev/null; then
+		echo "⚠  fetch failed (offline?), skipping staleness check"
+		return 0
+	fi
+
+	# Check if the branch has an upstream tracking ref
+	local upstream
+	upstream="$(git -C "$repo_dir" rev-parse --verify "refs/remotes/origin/$branch" 2>/dev/null || true)"
+	if [[ -z "$upstream" ]]; then
+		return 0 # no remote tracking — nothing to compare
+	fi
+
+	local local_ref
+	local_ref="$(git -C "$repo_dir" rev-parse --verify "$branch" 2>/dev/null || true)"
+	if [[ -z "$local_ref" ]]; then
+		return 0 # branch doesn't exist locally yet
+	fi
+
+	local behind
+	behind="$(git -C "$repo_dir" rev-list --count "$local_ref".."$upstream")"
+	if [[ "$behind" -gt 0 ]]; then
+		echo "⚠  $branch is $behind commit(s) behind origin/$branch"
+	fi
+}
+
 # ── commands ─────────────────────────────────────────────────────────
 
 cmd_add() {
@@ -94,6 +127,9 @@ cmd_add() {
 	fi
 
 	local repo_dir="$ROOT/$repo"
+
+	# Fetch and check for staleness
+	fetch_and_warn "$repo_dir" "$branch"
 
 	# Early exit if already active (only relevant when switching)
 	if [[ "$no_switch" == false ]]; then
@@ -149,6 +185,9 @@ cmd_switch() {
 
 	local repo_dir="$ROOT/$repo"
 
+	# Fetch and check for staleness
+	fetch_and_warn "$repo_dir" "$wt"
+
 	# Early exit if already active
 	local current_target
 	current_target="$(readlink "$repo_dir/active")"
@@ -191,6 +230,9 @@ cmd_rm() {
 	fi
 
 	local repo_dir="$ROOT/$repo"
+
+	# Fetch and check for staleness
+	fetch_and_warn "$repo_dir" "$branch"
 
 	# If active points to this branch, switch back to main first
 	local active_target
