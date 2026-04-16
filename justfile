@@ -44,6 +44,6 @@ fix *args:
 ci *args:
     {{scripts}}/ci.sh {{args}}
 
-# Manage worktrees: wt add|rm|ls|status
+# Manage worktrees: wt add|switch|rm|ls|status
 wt *args:
     {{scripts}}/wt.sh {{args}}

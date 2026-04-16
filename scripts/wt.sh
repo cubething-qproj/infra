@@ -11,10 +11,11 @@
 # branch is a symlink repoint — no Cargo.toml edits needed.
 #
 # Usage:
-#   wt.sh add <repo> <branch>   — create worktree and switch active
-#   wt.sh rm  <repo> <branch>   — remove worktree (refuses main)
-#   wt.sh ls  [repo]            — list worktrees
-#   wt.sh status                — show active symlinks
+#   wt.sh add    <repo> <branch> — create worktree and switch active
+#   wt.sh switch <repo> <wt>    — switch active to an existing worktree
+#   wt.sh rm     <repo> <branch> — remove worktree (refuses main)
+#   wt.sh ls     [repo]          — list worktrees
+#   wt.sh status                 — show active symlinks
 
 set -euo pipefail
 
@@ -31,12 +32,13 @@ usage() {
 		Usage: wt.sh <command> [args]
 
 		Commands:
-		  add <repo> <branch>   Create worktree and switch active symlink
-		                        (branch is created from current active HEAD
-		                        if it doesn't exist yet)
-		  rm  <repo> <branch>   Remove worktree (refuses main/active)
-		  ls  [repo]            List worktrees (all repos if none specified)
-		  status                Show active symlink targets
+		  add    <repo> <branch>   Create worktree and switch active symlink
+		                           (branch is created from current active HEAD
+		                           if it doesn't exist yet)
+		  switch <repo> <wt>       Switch active symlink to an existing worktree
+		  rm     <repo> <branch>   Remove worktree (refuses main/active)
+		  ls     [repo]            List worktrees (all repos if none specified)
+		  status                   Show active symlink targets
 	EOF
 	exit 1
 }
@@ -112,6 +114,44 @@ cmd_add() {
 	# Repoint the active symlink
 	ln -sfn "$branch" "$repo_dir/active"
 	echo "✓ $repo/active → $branch"
+}
+
+cmd_switch() {
+	if [[ $# -lt 2 ]]; then
+		echo "Usage: wt.sh switch <repo> <worktree>"
+		exit 1
+	fi
+
+	local repo="$1"
+	local wt="$2"
+	validate_repo "$repo"
+
+	local repo_dir="$ROOT/$repo"
+
+	# Early exit if already active
+	local current_target
+	current_target="$(readlink "$repo_dir/active")"
+	if [[ "$current_target" == "$wt" ]]; then
+		echo "✓ $repo/active already points to '$wt'"
+		return 0
+	fi
+
+	# Worktree must exist
+	if [[ ! -d "$repo_dir/$wt" ]] || [[ -L "$repo_dir/$wt" ]]; then
+		echo "error: worktree '$repo/$wt' does not exist"
+		echo "Use 'wt.sh add $repo $wt' to create it first."
+		exit 1
+	fi
+
+	# Safety check: Cargo.toml must exist in the worktree
+	if [[ ! -f "$repo_dir/$wt/Cargo.toml" ]]; then
+		echo "error: $repo/$wt/Cargo.toml not found"
+		exit 1
+	fi
+
+	# Repoint the active symlink
+	ln -sfn "$wt" "$repo_dir/active"
+	echo "✓ $repo/active → $wt (was $current_target)"
 }
 
 cmd_rm() {
@@ -192,6 +232,10 @@ case "${1:-}" in
 add)
 	shift
 	cmd_add "$@"
+	;;
+switch)
+	shift
+	cmd_switch "$@"
 	;;
 rm)
 	shift
