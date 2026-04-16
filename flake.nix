@@ -96,6 +96,7 @@
             cargo-deny
             cargo-llvm-cov
             act
+            actionlint
             just
             uv
           ];
