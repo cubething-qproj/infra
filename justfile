@@ -44,6 +44,10 @@ fix *args:
 ci *args:
     {{scripts}}/ci.sh {{args}}
 
+# Lint GitHub Actions workflows.
+actionlint:
+    actionlint
+
 # Manage worktrees: wt add|switch|rm|ls|status
 wt *args:
     {{scripts}}/wt.sh {{args}}

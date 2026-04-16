@@ -1,0 +1,22 @@
+name: Lint
+
+on:
+    push:
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Run actionlint
+              uses: raven-actions/actionlint@v2
+
+            - name: Install Nix
+              uses: DeterminateSystems/nix-installer-action@main
+
+            - name: Check flake inputs
+              uses: DeterminateSystems/flake-checker-action@main
+
+            - name: Check flake
+              run: nix flake check

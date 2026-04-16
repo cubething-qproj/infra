@@ -1,0 +1,46 @@
+name: Setup CI environment
+description: >
+  Shared CI setup: installs Nix with magic-nix-cache, restores Cargo caches,
+  starts sccache, and installs apt dependencies.
+
+inputs:
+  cargo-cache-prefix:
+    description: >
+      Prefix for Cargo cache keys, e.g. "x86_64-unknown-linux-gnu".
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Nix
+      uses: DeterminateSystems/nix-installer-action@main
+
+    - name: Cache Nix store
+      uses: DeterminateSystems/magic-nix-cache-action@main
+
+    - name: Check flake
+      uses: DeterminateSystems/flake-checker-action@main
+
+    - name: Cache Cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ inputs.cargo-cache-prefix }}-ci-${{ hashFiles('**/Cargo.toml') }}
+
+    - name: Run sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    - name: Install apt dependencies
+      shell: bash
+      run: >
+        sudo apt-get update;
+        sudo apt-get install -y --no-install-recommends
+        libasound2-dev
+        libudev-dev
+        libwayland-dev
+        ;
