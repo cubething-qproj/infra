@@ -1,9 +1,9 @@
 [workspace]
 members = [
-  "quell/main",
-  "q_screens/main",
-  "q_term/main",
-  "q_test_harness/main",
+  "quell/active",
+  "q_screens/active",
+  "q_term/active",
+  "q_test_harness/active",
 ]
 resolver = "3"
 

@@ -43,3 +43,7 @@ fix *args:
 # Test CI locally with act.
 ci *args:
     {{scripts}}/ci.sh {{args}}
+
+# Manage worktrees: wt add|rm|ls|status
+wt *args:
+    {{scripts}}/wt.sh {{args}}

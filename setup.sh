@@ -25,6 +25,17 @@ for repo in "${REPOS[@]}"; do
 	echo "✓ $repo ready"
 done
 
+# Create active symlinks (default to main)
+for repo in "${REPOS[@]}"; do
+	link="$ROOT/$repo/active"
+	if [ -L "$link" ]; then
+		echo "✓ $repo/active symlink exists"
+	else
+		ln -s main "$link"
+		echo "✓ $repo/active symlink created"
+	fi
+done
+
 # Create root-level symlinks
 echo ""
 echo "Creating root symlinks..."
