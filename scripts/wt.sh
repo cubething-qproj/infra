@@ -11,7 +11,7 @@
 # branch is a symlink repoint — no Cargo.toml edits needed.
 #
 # Usage:
-#   wt.sh add    <repo> <branch> — create worktree and switch active
+#   wt.sh add    [--no-switch] <repo> <branch> — create worktree (and switch active)
 #   wt.sh switch <repo> <wt>    — switch active to an existing worktree
 #   wt.sh rm     <repo> <branch> — remove worktree (refuses main)
 #   wt.sh ls     [repo]          — list worktrees
@@ -32,9 +32,11 @@ usage() {
 		Usage: wt.sh <command> [args]
 
 		Commands:
-		  add    <repo> <branch>   Create worktree and switch active symlink
+		  add    [--no-switch] <repo> <branch>
+		                           Create worktree and switch active symlink
 		                           (branch is created from current active HEAD
-		                           if it doesn't exist yet)
+		                           if it doesn't exist yet; --no-switch creates
+		                           the worktree without repointing active)
 		  switch <repo> <wt>       Switch active symlink to an existing worktree
 		  rm     <repo> <branch>   Remove worktree (refuses main/active)
 		  ls     [repo]            List worktrees (all repos if none specified)
@@ -68,13 +70,22 @@ is_reserved_branch() {
 # ── commands ─────────────────────────────────────────────────────────
 
 cmd_add() {
-	if [[ $# -lt 2 ]]; then
-		echo "Usage: wt.sh add <repo> <branch>"
+	local no_switch=false
+	local args=()
+	for arg in "$@"; do
+		case "$arg" in
+		--no-switch) no_switch=true ;;
+		*) args+=("$arg") ;;
+		esac
+	done
+
+	if [[ ${#args[@]} -lt 2 ]]; then
+		echo "Usage: wt.sh add [--no-switch] <repo> <branch>"
 		exit 1
 	fi
 
-	local repo="$1"
-	local branch="$2"
+	local repo="${args[0]}"
+	local branch="${args[1]}"
 	validate_repo "$repo"
 
 	if is_reserved_branch "$branch"; then
@@ -84,24 +95,30 @@ cmd_add() {
 
 	local repo_dir="$ROOT/$repo"
 
-	# Early exit if already active
-	local current_target
-	current_target="$(readlink "$repo_dir/active")"
-	if [[ "$current_target" == "$branch" ]]; then
-		echo "✓ $repo/active already points to '$branch'"
-		return 0
+	# Early exit if already active (only relevant when switching)
+	if [[ "$no_switch" == false ]]; then
+		local current_target
+		current_target="$(readlink "$repo_dir/active")"
+		if [[ "$current_target" == "$branch" ]]; then
+			echo "✓ $repo/active already points to '$branch'"
+			return 0
+		fi
 	fi
 
 	# Create branch if it doesn't exist
 	if ! git -C "$repo_dir" rev-parse --verify "$branch" &>/dev/null; then
-		echo "Creating branch '$branch' from '$current_target' HEAD..."
-		git -C "$repo_dir/$current_target" branch "$branch"
+		local base
+		base="$(readlink "$repo_dir/active")"
+		echo "Creating branch '$branch' from '$base' HEAD..."
+		git -C "$repo_dir/$base" branch "$branch"
 	fi
 
 	# Create worktree if it doesn't exist (check real dir, not symlink)
 	if [[ ! -d "$repo_dir/$branch" ]] || [[ -L "$repo_dir/$branch" ]]; then
 		echo "Creating worktree '$repo/$branch'..."
 		git -C "$repo_dir" worktree add "$branch" "$branch"
+	else
+		echo "✓ $repo/$branch worktree already exists"
 	fi
 
 	# Safety check: Cargo.toml must exist in the worktree
@@ -111,9 +128,13 @@ cmd_add() {
 		exit 1
 	fi
 
-	# Repoint the active symlink
-	ln -sfn "$branch" "$repo_dir/active"
-	echo "✓ $repo/active → $branch"
+	if [[ "$no_switch" == true ]]; then
+		echo "✓ $repo/$branch ready (active unchanged)"
+	else
+		# Repoint the active symlink
+		ln -sfn "$branch" "$repo_dir/active"
+		echo "✓ $repo/active → $branch"
+	fi
 }
 
 cmd_switch() {
