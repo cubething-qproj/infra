@@ -2,17 +2,12 @@ name: Generate codecov
 
 on:
   workflow_call:
-    inputs:
-      package:
-        description: 'Package to collect coverage for.'
-        type: string
-        required: true
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: true
   RUSTFLAGS: -Zcodegen-backend=llvm
-  RUSTC_WRAPPER: sccache
 
 jobs:
   generate-coverage:
@@ -25,15 +20,20 @@ jobs:
       - name: Setup CI environment
         uses: ./.github/actions/setup
         with:
-          cargo-cache-prefix: ${{ inputs.package }}
+          cargo-cache-prefix: coverage
+
+      - uses: nicknovitski/nix-develop@v1
+
+      - name: Detect package name
+        id: pkg
+        run: echo "name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')" >> "$GITHUB_OUTPUT"
 
       - name: Collect coverage data
         run: >
-          nix develop --command bash -c
-          "cargo llvm-cov nextest --manifest-path=./workspace/Cargo.toml
-          -p ${{ inputs.package }} --lcov --output-path report.lcov"
+          cargo llvm-cov nextest --manifest-path=./workspace/Cargo.toml
+          -p ${{ steps.pkg.outputs.name }} --lcov --output-path report.lcov
 
       - name: Upload to coveralls
         uses: coverallsapp/github-action@v2.3.6
         with:
-          flag-name: ${{ inputs.package }}
+          flag-name: ${{ steps.pkg.outputs.name }}

@@ -1,0 +1,18 @@
+[
+  { "src": ".github/templates/ci.yml", "dst": ".github/workflows/ci.yml" },
+  { "src": ".github/templates/flake.nix", "dst": "flake.nix" },
+  { "src": "downstream.just", "dst": "justfile" },
+  { "src": "shared.just", "dst": "shared.just" },
+  { "src": "scripts/build.sh", "dst": "scripts/build.sh" },
+  { "src": "scripts/clippy.sh", "dst": "scripts/clippy.sh" },
+  { "src": "scripts/bevy-lint.sh", "dst": "scripts/bevy-lint.sh" },
+  { "src": "scripts/check.sh", "dst": "scripts/check.sh" },
+  { "src": "scripts/test.sh", "dst": "scripts/test.sh" },
+  { "src": "scripts/deny.sh", "dst": "scripts/deny.sh" },
+  { "src": "scripts/play.sh", "dst": "scripts/play.sh" },
+  { "src": "scripts/ci.sh", "dst": "scripts/ci.sh" },
+  { "src": "scripts/coverage.sh", "dst": "scripts/coverage.sh" },
+  { "src": "deny.toml", "dst": "deny.toml" },
+  { "src": ".config/nextest.toml", "dst": ".config/nextest.toml" },
+  { "src": ".cargo/config.toml", "dst": ".cargo/config.toml" }
+]
