@@ -18,7 +18,7 @@ jobs:
           submodules: recursive
 
       - name: Setup CI environment
-        uses: ./.github/actions/setup
+        uses: cubething-qproj/infra/.github/actions/setup@main
         with:
           cargo-cache-prefix: coverage
 
