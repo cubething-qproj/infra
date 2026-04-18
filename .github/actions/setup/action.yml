@@ -20,6 +20,8 @@ runs:
 
     - name: Check flake
       uses: DeterminateSystems/flake-checker-action@main
+      with:
+        nixpkgs-keys: ''
 
     - name: Cache Cargo
       uses: actions/cache@v4
