@@ -10,7 +10,7 @@ jobs:
     outputs:
       repos: ${{ steps.read.outputs.repos }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: read
         run: echo "repos=$(jq -c '.' downstream-repos.json)" >> "$GITHUB_OUTPUT"
 
@@ -22,12 +22,12 @@ jobs:
         repo: ${{ fromJson(needs.load-config.outputs.repos) }}
     steps:
       - name: Checkout infra
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: infra
 
       - name: Checkout downstream
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ matrix.repo }}
           token: ${{ secrets.DISPATCH_TOKEN }}
