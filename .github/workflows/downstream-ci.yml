@@ -1,0 +1,95 @@
+name: Downstream CI
+
+on:
+  workflow_call:
+    inputs:
+      caller-event-name:
+        description: 'github.event_name from the caller workflow (reusable workflows always see workflow_call)'
+        type: string
+        required: true
+      caller-head-ref:
+        description: 'github.head_ref from the caller workflow (for PR branch detection)'
+        type: string
+        default: ''
+      caller-pr-number:
+        description: 'github.event.pull_request.number from the caller'
+        type: string
+        default: ''
+      failure-assignees:
+        description: 'Comma-separated list of GitHub usernames to assign on failure'
+        type: string
+        default: 'ada-x64'
+    secrets:
+      DISPATCH_TOKEN:
+        description: 'PAT with contents:write and pull-requests:write for auto-merge'
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: true
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+        with:
+          cargo-cache-prefix: ${{ matrix.target }}
+
+      - uses: nicknovitski/nix-develop@v1
+
+      - run: just build
+      - run: just clippy
+      - run: just bevy-lint
+      - run: just test
+
+  auto-merge:
+    needs: build_and_test
+    if: inputs.caller-event-name == 'pull_request' && inputs.caller-head-ref == 'automation/sync-infra'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - if: inputs.caller-pr-number != ''
+        run: gh pr merge ${{ inputs.caller-pr-number }} --merge --delete-branch
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+
+  notify-failure:
+    needs: build_and_test
+    if: failure() && inputs.caller-event-name == 'pull_request' && inputs.caller-head-ref == 'automation/sync-infra'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create or update failure issue
+        run: |
+          TITLE="CI sync failure from infra"
+          BODY="CI failed on automation/sync-infra PR #${{ inputs.caller-pr-number }}.
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Please investigate and fix manually."
+
+          EXISTING=$(gh issue list --search "is:open in:title $TITLE" --json number,title -q '.[] | select(.title == "CI sync failure from infra") | .number' | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --assignee "${{ inputs.failure-assignees }}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+
+  coverage:
+    needs: build_and_test
+    uses: ./.github/workflows/downstream-codecov.yml

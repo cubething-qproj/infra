@@ -3,11 +3,3 @@
 # -------------------------------- 𝒒𝒑𝒓𝒐𝒋 --
 
 import 'shared.just'
-
-# Lint GitHub Actions workflows.
-actionlint:
-    actionlint
-
-# Manage worktrees: wt add|switch|rm|ls|status
-wt *args:
-    {{scripts}}/wt.sh {{args}}

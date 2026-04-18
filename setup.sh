@@ -37,7 +37,7 @@ for repo in "${REPOS[@]}"; do
 	fi
 done
 
-# Create root-level symlinks
+# Create root-level symlinks (Cargo files only)
 echo ""
 echo "Creating root symlinks..."
 for f in Cargo.toml Cargo.lock justfile .cargo .config .zed; do
@@ -46,6 +46,15 @@ for f in Cargo.toml Cargo.lock justfile .cargo .config .zed; do
 	ln -s "$target" "$link"
 	echo "✓ $f symlink created"
 done
+
+# Copy root justfile from template
+if [ ! -f "$ROOT/justfile" ] || [ -L "$ROOT/justfile" ]; then
+	[ -L "$ROOT/justfile" ] && rm "$ROOT/justfile"
+	cp "$SCRIPT_DIR/metarepo.just" "$ROOT/justfile"
+	echo "✓ justfile copied from template"
+else
+	echo "✓ justfile exists (run 'just self-update' to refresh)"
+fi
 
 # Create root .envrc if missing
 if [ ! -f "$ROOT/.envrc" ]; then

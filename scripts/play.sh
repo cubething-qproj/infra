@@ -6,7 +6,14 @@ BUILD_ARGS="-F dylib"
 FILE="target/debug/quell"
 ENV_VARS=""
 CMD_ARGS=""
-ASSETS="../../quell/main/assets"
+# Detect metarepo vs standalone layout
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -d "$REPO_ROOT/../../infra" ]; then
+	ASSETS="$REPO_ROOT/../../quell/main/assets"
+else
+	ASSETS="$REPO_ROOT/assets"
+fi
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
