@@ -5,6 +5,10 @@ on:
 
 jobs:
   ci:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
     uses: cubething-qproj/infra/.github/workflows/downstream-ci.yml@main
     with:
       caller-event-name: ${{ github.event_name }}
