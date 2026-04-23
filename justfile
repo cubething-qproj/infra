@@ -4,10 +4,11 @@
 
 import 'shared.just'
 
+mod ws 'ws.justfile'
+
+_default:
+    @just --justfile {{ justfile() }} --list --unsorted
+
 # Lint GitHub Actions workflows.
 actionlint:
     actionlint
-
-# Manage worktrees: wt add|switch|rm|ls|status
-wt *args:
-    {{scripts}}/wt.sh {{args}}
