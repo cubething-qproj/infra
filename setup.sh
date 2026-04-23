@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 REPOS=(q_screens q_term q_test_harness quell)
+DOWNSTREAM=(infra)
 
 # Initialize submodules (pj).
 echo "Initializing submodules..."
@@ -75,6 +76,7 @@ use flake ./infra/main
 export PROJECT_ROOT="\$(pwd)"
 export PRIMARY_OWNER="$ORG"
 export PRIMARY_REPOS="${REPOS[*]}"
+export DOWNSTREAM_REPOS="${DOWNSTREAM[*]}"
 export GH_TOKEN=\$(gh auth token 2>/dev/null || echo "")
 EOF
 echo "✓ .envrc written"
