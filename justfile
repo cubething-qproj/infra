@@ -4,6 +4,8 @@
 
 import 'shared.just'
 
+mod ws 'ws.justfile'
+
 # Lint GitHub Actions workflows.
 actionlint:
     actionlint
