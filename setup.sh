@@ -68,6 +68,23 @@ else
 	echo "✓ justfile exists (run 'just self-update' to refresh)"
 fi
 
+# Seed root AGENTS.md from infra template (chezmoi create_-style:
+# copy once on first init; never clobber a real file the operator has
+# customized).
+agents_src="$SCRIPT_DIR/AGENTS.metarepo.md"
+agents_dst="$ROOT/AGENTS.md"
+if [ ! -e "$agents_dst" ]; then
+	if [ ! -f "$agents_src" ]; then
+		echo "✗ AGENTS.metarepo.md missing at $agents_src" >&2
+		exit 1
+	fi
+	cp "$agents_src" "$agents_dst"
+	echo "✓ AGENTS.md seeded from infra/main/AGENTS.metarepo.md"
+else
+	echo "✓ AGENTS.md exists (operator-owned; diff against"
+	echo "   infra/main/AGENTS.metarepo.md to pick up template updates)"
+fi
+
 # Write root .envrc (exports env needed by ws recipes + flake).
 envrc="$ROOT/.envrc"
 cat >"$envrc" <<EOF
