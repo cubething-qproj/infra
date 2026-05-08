@@ -6,11 +6,12 @@ set allow-duplicate-variables
 
 import 'infra/main/shared.just'
 
+mod ws 'infra/main/ws.justfile'
+
 scripts := parent_directory(canonicalize(justfile())) / "infra/main/scripts"
 
-# Manage worktrees: wt add|switch|rm|ls|status
-wt *args:
-    {{scripts}}/wt.sh {{args}}
+_default:
+    @just --justfile {{ justfile() }} --list --unsorted
 
 # Regenerate this justfile from infra template.
 self-update:
