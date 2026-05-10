@@ -16,6 +16,14 @@
       url = "github:TheBevyFlock/bevy_cli/lint-v0.6.0";
       flake = false;
     };
+    # nixGL: wraps binaries so Nix-linked Vulkan/GL apps can find host
+    # GPU drivers on non-NixOS hosts. Required because Nix's glibc loader
+    # ignores /etc/ld.so.cache, so system ICDs' bare-name dlopen() fails.
+    nixgl = {
+      url = "github:nix-community/nixGL";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
   };
 
   outputs = {
@@ -25,6 +33,7 @@
     rust-overlay,
     crane,
     bevy-cli-src,
+    nixgl,
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
@@ -77,48 +86,69 @@
           libxkbcommon
           vulkan-loader
         ]);
+
+        # Mesa wrapper covers AMD, Intel, and Nouveau (purely buildable).
+        # nixGLNvidia uses builtins.exec to read the host driver version and
+        # therefore requires `nix develop --impure` (plus
+        # allow-unsafe-native-code-during-evaluation). It is offered via a
+        # separate `nvidia` devshell so mesa users don't pay that cost.
+        nixglPkgs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+          nixgl.packages.${system}.nixVulkanIntel
+        ];
+
+        nixglNvidiaPkgs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+          nixgl.packages.${system}.nixVulkanNvidia
+        ];
+
+        mkShell = extraPackages:
+          pkgs.mkShell {
+            nativeBuildInputs = [pkgs.pkg-config];
+
+            buildInputs =
+              linuxDeps
+              ++ [
+                rustToolchain
+                bevy_lint
+              ];
+
+            packages =
+              (with pkgs; [
+                sccache
+                mold
+                patchelf
+                cargo-nextest
+                cargo-deny
+                cargo-llvm-cov
+                act
+                actionlint
+                just
+                uv
+              ])
+              ++ extraPackages;
+
+            shellHook = ''
+              export CARGO_TERM_COLOR="always"
+              export PYTHONUNBUFFERED=1
+              export RUSTC_WRAPPER="sccache"
+
+              if [ -n "$SSH_CLIENT" ]; then
+                export FEATURES=""
+              else
+                export FEATURES="dylib"
+              fi
+
+              if [ -f ".env.local" ]; then
+                source ".env.local"
+              fi
+            '';
+
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath linuxDeps;
+          };
       in {
-        devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [pkgs.pkg-config];
-
-          buildInputs =
-            linuxDeps
-            ++ [
-              rustToolchain
-              bevy_lint
-            ];
-
-          packages = with pkgs; [
-            sccache
-            mold
-            patchelf
-            cargo-nextest
-            cargo-deny
-            cargo-llvm-cov
-            act
-            actionlint
-            just
-            uv
-          ];
-
-          shellHook = ''
-            export CARGO_TERM_COLOR="always"
-            export PYTHONUNBUFFERED=1
-            export RUSTC_WRAPPER="sccache"
-
-            if [ -n "$SSH_CLIENT" ]; then
-              export FEATURES=""
-            else
-              export FEATURES="dylib"
-            fi
-
-            if [ -f ".env.local" ]; then
-              source ".env.local"
-            fi
-          '';
-
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath linuxDeps;
-        };
+        devShells.default = mkShell nixglPkgs;
+        # Use with: `nix develop --impure .#nvidia` (or in .envrc:
+        # `use flake --impure .#nvidia`).
+        devShells.nvidia = mkShell nixglNvidiaPkgs;
       }
     );
 }

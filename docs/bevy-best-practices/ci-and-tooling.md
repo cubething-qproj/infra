@@ -15,7 +15,7 @@ lint configuration that bare `cargo` won't apply.
 
 | Recipe | What it does |
 |---|---|
-| `just build [args]` | Build the workspace. Wraps `scripts/build.sh`. |
+| `just build [args]` | Build the workspace. Wraps `scripts/build.py`. |
 | `just play [args]` | Run the application (`quell`). |
 | `just check [args]` | clippy + bevy_lint together. The default pre-commit check. |
 | `just clippy [args]` | clippy alone. |
@@ -26,20 +26,23 @@ lint configuration that bare `cargo` won't apply.
 | `just fix [args]` | Apply clippy --fix. |
 | `just ci [args]` | Run CI locally via `act`. |
 
-The scripts these recipes wrap live in `infra/main/scripts/`. If you
-need to extend a recipe, edit the script (in the `infra` worktree) —
-not the recipe.
+The scripts these recipes wrap live in `infra/main/scripts/` and are
+[uv](https://docs.astral.sh/uv/) single-file scripts (PEP 723 inline
+metadata + `#!/usr/bin/env -S uv run --script`). If you need to extend
+a recipe, edit the script (in the `infra` worktree) — not the recipe.
+Each script honours `--help` via [typer](https://typer.tiangolo.com/).
 
 ### Why not `cargo run -p ci` / xtask?
 
 Bevy upstream uses `cargo run -p ci` (a binary crate at `tools/ci`).
 Many ecosystem crates use xtask (`cargo run -p xtask -- <subcommand>`).
-Both are functionally equivalent to `just` + shell scripts; xtask wins
+Both are functionally equivalent to `just` + uv scripts; xtask wins
 when cross-platform Windows-without-WSL support is required.
 
-We use `just` because:
+We use `just` + uv because:
 - Recipes are more legible than Rust subcommand dispatch.
-- Shell scripts are easier to inspect/modify than xtask source.
+- uv scripts are easier to inspect/modify than xtask source and get
+  free dependency management via PEP 723.
 - We don't ship to Windows-without-WSL.
 
 If that calculus changes, migrating `infra/main/scripts/` to an xtask
