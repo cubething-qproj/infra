@@ -16,3 +16,7 @@ _default:
 # Regenerate this justfile from infra template.
 self-update:
     cp infra/main/metarepo.just justfile
+
+# Switch a repo's `active` symlink to an existing worktree branch.
+switch-branch repo branch:
+    @just ws wt switch {{ repo }} {{ branch }}
