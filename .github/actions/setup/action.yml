@@ -31,6 +31,14 @@ runs:
 
     - name: Run sccache
       uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        # Pin to match the sccache version provided by the nix devshell
+        # (see flake.nix). The devshell's sccache is the actual server
+        # (RUSTC_WRAPPER=sccache); the action's binary only runs
+        # `--show-stats` in its post step. A version mismatch there
+        # causes "Mismatch of client/server versions?" and fails CI on
+        # cleanup. Bump in lockstep with nixpkgs' sccache.
+        version: "v0.14.0"
 
     - name: Install apt dependencies
       shell: bash
