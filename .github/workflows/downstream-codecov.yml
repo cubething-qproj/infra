@@ -30,8 +30,7 @@ jobs:
 
       - name: Collect coverage data
         run: >
-          cargo llvm-cov nextest --manifest-path=./workspace/Cargo.toml
-          -p ${{ steps.pkg.outputs.name }} --lcov --output-path report.lcov
+          cargo llvm-cov nextest --lcov --output-path report.lcov
 
       - name: Upload to coveralls
         uses: coverallsapp/github-action@v2.3.6
