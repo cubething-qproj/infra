@@ -43,6 +43,8 @@ jobs:
           cargo-cache-prefix: ${{ matrix.target }}
 
       - uses: nicknovitski/nix-develop@v1
+        with:
+          arguments: .#ci
 
       - run: just build
       - run: just clippy
