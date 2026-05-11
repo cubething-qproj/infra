@@ -174,20 +174,42 @@ def _resolve_nixgl(override: str | None) -> str:
     if resolved:
         return resolved
 
+    in_nix_shell = os.environ.get("IN_NIX_SHELL", "")
     print(
         f"play.py: detected GPU wants '{name}' but it isn't on PATH.",
         file=sys.stderr,
     )
-    if name == "nixVulkanNvidia":
-        print("  Enter the NVIDIA devshell: nix develop --impure .#nvidia", file=sys.stderr)
-        print("  Or in .envrc:               use flake --impure .#nvidia", file=sys.stderr)
+    if not in_nix_shell:
+        print(
+            "  IN_NIX_SHELL is unset -- you are not inside a nix devshell.",
+            file=sys.stderr,
+        )
+        print(
+            "  direnv likely hasn't fired in this shell. Try `direnv reload`,",
+            file=sys.stderr,
+        )
+        print(
+            "  open a fresh terminal in the project root, or run via:",
+            file=sys.stderr,
+        )
+        print(
+            "    nix develop --impure ./infra/main#nvidia -c just play ...",
+            file=sys.stderr,
+        )
+    elif name == "nixVulkanNvidia":
+        print("  Enter the NVIDIA devshell: nix develop --impure ./infra/main#nvidia", file=sys.stderr)
+        print("  Or in .envrc:               use flake --impure ./infra/main#nvidia", file=sys.stderr)
     elif name == "nixVulkanIntel":
-        print("  Enter the default devshell: nix develop", file=sys.stderr)
+        print("  Enter the default devshell: nix develop --impure ./infra/main", file=sys.stderr)
     print(
         "  Override with -G <wrapper> or NIXGL=<wrapper>; disable with NO_NIXGL=1.",
         file=sys.stderr,
     )
-    return ""
+    print(
+        "play.py: refusing to launch -- the binary would panic at vkCreateInstance.",
+        file=sys.stderr,
+    )
+    raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------
