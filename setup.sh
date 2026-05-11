@@ -85,16 +85,48 @@ else
 	echo "   infra/main/AGENTS.metarepo.md to pick up template updates)"
 fi
 
+# Detect GPU vendor for the right nix devshell variant. Mirrors the
+# logic in infra/main/scripts/play.py:_autodetect_nixgl. NVIDIA hosts
+# need the #nvidia devshell (carries nixVulkanNvidia + the unfree
+# driver); Intel/AMD use the default shell (carries nixVulkanIntel).
+detect_gpu_suffix() {
+	if [ -e /proc/driver/nvidia/version ]; then
+		echo "#nvidia"
+		return
+	fi
+	for f in /sys/class/drm/card*/device/vendor; do
+		[ -e "$f" ] || continue
+		case "$(cat "$f" 2>/dev/null)" in
+			0x10de) echo "#nvidia"; return ;;
+		esac
+	done
+	echo ""
+}
+flake_suffix="$(detect_gpu_suffix)"
+if [ -n "$flake_suffix" ]; then
+	echo "✓ detected NVIDIA GPU; .envrc will use flake variant '$flake_suffix'"
+else
+	echo "✓ no NVIDIA GPU detected; .envrc will use default flake variant"
+fi
+
 # Write root .envrc (exports env needed by ws recipes + flake).
+# Exports MUST come before `use flake` -- the flake's eval depends on
+# NIXPKGS_ALLOW_UNFREE (NVIDIA driver is unfree) and nixGL needs
+# --impure for `builtins.currentTime`. Direnv applies exports in source
+# order, so reordering breaks evaluation.
 envrc="$ROOT/.envrc"
 cat >"$envrc" <<EOF
-use flake ./infra/main
-
 export PROJECT_ROOT="\$(pwd)"
 export PRIMARY_OWNER="$ORG"
 export PRIMARY_REPOS="${REPOS[*]}"
 export DOWNSTREAM_REPOS="${DOWNSTREAM[*]}"
 export GH_TOKEN=\$(gh auth token 2>/dev/null || echo "")
+export NIXPKGS_ALLOW_UNFREE=1
+
+# GPU-variant autodetected by setup.sh. Override by editing the suffix
+# (e.g. drop '#nvidia' for the default shell, or change to a different
+# variant). Re-running setup.sh will re-detect and overwrite.
+use flake --impure ./infra/main${flake_suffix}
 EOF
 echo "✓ .envrc written"
 
