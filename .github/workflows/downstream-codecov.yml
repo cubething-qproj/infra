@@ -23,6 +23,8 @@ jobs:
           cargo-cache-prefix: coverage
 
       - uses: nicknovitski/nix-develop@v1
+        with:
+          arguments: .#ci
 
       - name: Detect package name
         id: pkg

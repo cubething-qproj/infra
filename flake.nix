@@ -146,6 +146,11 @@
           };
       in {
         devShells.default = mkShell nixglPkgs;
+        # CI variant: identical to `default` but without nixGL. Headless
+        # GitHub runners never need host-GPU driver wrappers, and nixGL
+        # pulls a non-trivial closure (Vulkan loader, ICDs, GL libs).
+        # Consumed by downstream CI via `nix develop .#ci`.
+        devShells.ci = mkShell [];
         # Use with: `nix develop --impure .#nvidia` (or in .envrc:
         # `use flake --impure .#nvidia`).
         devShells.nvidia = mkShell nixglNvidiaPkgs;
