@@ -1,5 +1,5 @@
 <div align="center">
-    <img height=300 src="./.doc/qproj.png" alt="illustration of a quail next to text, 'qproj' " title="qproj logo"></img>
+    <img height=300 src="./docs/qproj.png" alt="illustration of a quail next to text, 'qproj' " title="qproj logo"></img>
 </div>
 
 Shared infrastructure for the _qproj_ family of crates — scripts, Cargo

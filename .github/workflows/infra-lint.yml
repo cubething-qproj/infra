@@ -17,6 +17,29 @@ jobs:
 
             - name: Check flake inputs
               uses: DeterminateSystems/flake-checker-action@main
+              with:
+                  flake-lock-path: metarepo/flake.lock
 
             - name: Check flake
-              run: nix flake check
+              run: nix flake check ./metarepo
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v6
+              with:
+                  enable-cache: true
+
+            - name: Sync python dev deps
+              working-directory: scripts
+              run: uv sync --group dev
+
+            - name: ruff check
+              working-directory: scripts
+              run: uv run ruff check
+
+            - name: ruff format --check
+              working-directory: scripts
+              run: uv run ruff format --check
+
+            - name: basedpyright
+              working-directory: scripts
+              run: uv run basedpyright

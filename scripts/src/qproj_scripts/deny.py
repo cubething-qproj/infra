@@ -1,15 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#   "typer>=0.12",
-# ]
-# ///
 """Audit dependencies via ``cargo deny``.
-
-Invocation:
-  just deny
-  uv run --script infra/main/scripts/deny.py
 
 Runs the advisories, bans, and sources checks across the whole workspace at
 log-level error, with the dependency-inclusion graph hidden for terser output.
@@ -17,20 +6,17 @@ log-level error, with the dependency-inclusion graph hidden for terser output.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import typer
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-import _common  # noqa: E402
-import typer  # noqa: E402
+from qproj_scripts import _common
 
 app = typer.Typer(
-    add_completion=False, context_settings={"help_option_names": ["-h", "--help"]}
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main() -> None:
     """Run ``cargo deny check advisories bans sources``."""
     result = _common.run(
@@ -49,7 +35,3 @@ def main() -> None:
         check=False,
     )
     raise typer.Exit(result.returncode)
-
-
-if __name__ == "__main__":
-    app()

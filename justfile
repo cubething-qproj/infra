@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # -------------------------------- 𝒒𝒑𝒓𝒐𝒋 --
 
-import 'shared.just'
+import 'just/shared.just'
 
-mod ws 'ws.justfile'
+mod ws 'just/ws.justfile'
 
 _default:
     @just --justfile {{ justfile() }} --list --unsorted

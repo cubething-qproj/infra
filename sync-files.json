@@ -1,20 +1,7 @@
 [
   { "src": ".github/templates/ci.yml", "dst": ".github/workflows/ci.yml" },
   { "src": ".github/templates/flake.nix", "dst": "flake.nix" },
-  { "src": "downstream.just", "dst": "justfile" },
-  { "src": "shared.just", "dst": "shared.just" },
-  { "src": "scripts/_common.py", "dst": "scripts/_common.py" },
-  { "src": "scripts/build.py", "dst": "scripts/build.py" },
-  { "src": "scripts/clippy.py", "dst": "scripts/clippy.py" },
-  { "src": "scripts/bevy_lint.py", "dst": "scripts/bevy_lint.py" },
-  { "src": "scripts/check.py", "dst": "scripts/check.py" },
-  { "src": "scripts/test.py", "dst": "scripts/test.py" },
-  { "src": "scripts/deny.py", "dst": "scripts/deny.py" },
-  { "src": "scripts/play.py", "dst": "scripts/play.py" },
-  { "src": "scripts/ci.py", "dst": "scripts/ci.py" },
-  { "src": "scripts/coverage.py", "dst": "scripts/coverage.py" },
-  { "src": "scripts/ra_check.py", "dst": "scripts/ra_check.py" },
-  { "src": "deny.toml", "dst": "deny.toml" },
-  { "src": ".config/nextest.toml", "dst": ".config/nextest.toml" },
-  { "src": ".cargo/config.toml", "dst": ".cargo/config.toml" }
+  { "src": "config/deny.toml", "dst": "deny.toml" },
+  { "src": "config/nextest.toml", "dst": ".config/nextest.toml" },
+  { "src": "config/config.toml", "dst": ".cargo/config.toml" }
 ]
