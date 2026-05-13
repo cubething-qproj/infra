@@ -104,12 +104,8 @@ def _patch_elf_for_psync(target: Path) -> None:
         ]
     )
 
-    _common.run(
-        ["patchelf", "--set-interpreter", "/lib64/ld-linux-x86-64.so.2", str(target)]
-    )
-    _common.run(
-        ["patchelf", "--replace-needed", libbevy, "libbevy_dylib.so", str(target)]
-    )
+    _common.run(["patchelf", "--set-interpreter", "/lib64/ld-linux-x86-64.so.2", str(target)])
+    _common.run(["patchelf", "--replace-needed", libbevy, "libbevy_dylib.so", str(target)])
     _common.run(["patchelf", "--set-rpath", "/home/psync/lib", str(target)])
 
 
@@ -148,7 +144,7 @@ def _resolve_nixgl_with_suffix(name: str) -> str:
             for entry in Path(d).iterdir():
                 if entry.name.startswith(f"{name}-") and os.access(entry, os.X_OK):
                     return entry.name
-        except (FileNotFoundError, NotADirectoryError, PermissionError):
+        except FileNotFoundError, NotADirectoryError, PermissionError:
             continue
     return ""
 
@@ -225,12 +221,8 @@ def _resolve_nixgl(override: str | None) -> str:
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    example: str | None = typer.Option(
-        None, "-x", "--example", help="Cargo --example name."
-    ),
-    package: str | None = typer.Option(
-        None, "-p", "--package", help="Cargo -p package."
-    ),
+    example: str | None = typer.Option(None, "-x", "--example", help="Cargo --example name."),
+    package: str | None = typer.Option(None, "-p", "--package", help="Cargo -p package."),
     build_args: str = typer.Option(
         "-F dylib", "-B", "--build-args", help="Extra args forwarded to `just build`."
     ),
