@@ -111,7 +111,6 @@
             shellHook = ''
               export CARGO_TERM_COLOR="always"
               export PYTHONUNBUFFERED=1
-              export RUSTC_WRAPPER="sccache"
 
               if [ -n "$SSH_CLIENT" ]; then
                 export FEATURES=""
