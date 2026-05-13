@@ -143,7 +143,7 @@ export LOCAL=1
 # GPU-variant autodetected by setup.sh. Override by editing the suffix
 # (e.g. drop '#nvidia' for the default shell, or change to a different
 # variant). Re-running setup.sh will re-detect and overwrite.
-use flake --impure ./infra/main/metarepo${flake_suffix}
+use flake --impure ./infra/main${flake_suffix}
 EOF
 echo "✓ .envrc written"
 

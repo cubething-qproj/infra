@@ -18,10 +18,10 @@ jobs:
             - name: Check flake inputs
               uses: DeterminateSystems/flake-checker-action@main
               with:
-                  flake-lock-path: metarepo/flake.lock
+                  flake-lock-path: flake.lock
 
             - name: Check flake
-              run: nix flake check ./metarepo
+              run: nix flake check
 
             - name: Install uv
               uses: astral-sh/setup-uv@v6
