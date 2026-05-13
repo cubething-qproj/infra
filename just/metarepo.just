@@ -4,9 +4,9 @@
 
 set allow-duplicate-variables
 
-import 'infra/main/shared.just'
+import 'infra/main/just/shared.just'
 
-mod ws 'infra/main/ws.justfile'
+mod ws 'infra/main/just/ws.justfile'
 
 scripts := parent_directory(canonicalize(justfile())) / "infra/main/scripts"
 

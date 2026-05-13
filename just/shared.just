@@ -3,43 +3,48 @@
 # -------------------------------- 𝒒𝒑𝒓𝒐𝒋 --
 
 scripts := parent_directory(canonicalize(justfile())) / "scripts"
+qproj := "uv run --project " + quote(scripts) + " qproj-scripts"
 
 # Build the workspace.
 build *args:
-    {{scripts}}/build.py {{args}}
+    {{ qproj }} build {{ args }}
 
 # Run the application.
 play *args:
-    {{scripts}}/play.py {{args}}
+    {{ qproj }} play {{ args }}
 
 # Lint with Clippy and bevy_lint.
 check *args:
-    {{scripts}}/check.py {{args}}
+    {{ qproj }} check {{ args }}
 
 # Run clippy.
 clippy *args:
-    {{scripts}}/clippy.py {{args}}
+    {{ qproj }} clippy {{ args }}
 
 # Run bevy_lint.
 bevy-lint *args:
-    {{scripts}}/bevy_lint.py {{args}}
+    {{ qproj }} bevy-lint {{ args }}
 
 # Check dependencies with cargo-deny.
 deny:
-    {{scripts}}/deny.py
+    {{ qproj }} deny
 
 # Run tests via cargo-nextest.
 test *args:
-    {{scripts}}/test.py {{args}}
+    {{ qproj }} test {{ args }}
 
 # Generate test coverage report.
 coverage *args:
-    {{scripts}}/coverage.py {{args}}
+    {{ qproj }} coverage {{ args }}
 
 # Fix all fixable issues.
 fix *args:
-    {{scripts}}/clippy.py --fix {{args}}
+    {{ qproj }} fix {{ args }}
 
 # Test CI locally with act.
 ci *args:
-    {{scripts}}/ci.py {{args}}
+    {{ qproj }} ci {{ args }}
+
+# Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.
+ra-check *args:
+    {{ qproj }} ra-check {{ args }}

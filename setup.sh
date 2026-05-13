@@ -62,7 +62,7 @@ done
 # Copy root justfile from template
 if [ ! -f "$ROOT/justfile" ] || [ -L "$ROOT/justfile" ]; then
 	[ -L "$ROOT/justfile" ] && rm "$ROOT/justfile"
-	cp "$SCRIPT_DIR/metarepo.just" "$ROOT/justfile"
+	cp "$SCRIPT_DIR/just/metarepo.just" "$ROOT/justfile"
 	echo "✓ justfile copied from template"
 else
 	echo "✓ justfile exists (run 'just self-update' to refresh)"
