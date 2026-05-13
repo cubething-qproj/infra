@@ -6,21 +6,63 @@
   { "src": "scripts/.python-version", "dst": "scripts/.python-version" },
   { "src": "scripts/pyproject.toml", "dst": "scripts/pyproject.toml" },
   { "src": "scripts/uv.lock", "dst": "scripts/uv.lock" },
-  { "src": "scripts/src/qproj_scripts/__init__.py", "dst": "scripts/src/qproj_scripts/__init__.py" },
-  { "src": "scripts/src/qproj_scripts/__main__.py", "dst": "scripts/src/qproj_scripts/__main__.py" },
-  { "src": "scripts/src/qproj_scripts/cli.py", "dst": "scripts/src/qproj_scripts/cli.py" },
-  { "src": "scripts/src/qproj_scripts/_common.py", "dst": "scripts/src/qproj_scripts/_common.py" },
-  { "src": "scripts/src/qproj_scripts/build.py", "dst": "scripts/src/qproj_scripts/build.py" },
-  { "src": "scripts/src/qproj_scripts/play.py", "dst": "scripts/src/qproj_scripts/play.py" },
-  { "src": "scripts/src/qproj_scripts/check.py", "dst": "scripts/src/qproj_scripts/check.py" },
-  { "src": "scripts/src/qproj_scripts/clippy.py", "dst": "scripts/src/qproj_scripts/clippy.py" },
-  { "src": "scripts/src/qproj_scripts/bevy_lint.py", "dst": "scripts/src/qproj_scripts/bevy_lint.py" },
-  { "src": "scripts/src/qproj_scripts/deny.py", "dst": "scripts/src/qproj_scripts/deny.py" },
-  { "src": "scripts/src/qproj_scripts/test.py", "dst": "scripts/src/qproj_scripts/test.py" },
-  { "src": "scripts/src/qproj_scripts/coverage.py", "dst": "scripts/src/qproj_scripts/coverage.py" },
-  { "src": "scripts/src/qproj_scripts/ci.py", "dst": "scripts/src/qproj_scripts/ci.py" },
-  { "src": "scripts/src/qproj_scripts/ra_check.py", "dst": "scripts/src/qproj_scripts/ra_check.py" },
-  { "src": "deny.toml", "dst": "deny.toml" },
-  { "src": ".config/nextest.toml", "dst": ".config/nextest.toml" },
-  { "src": ".cargo/config.toml", "dst": ".cargo/config.toml" }
+  {
+    "src": "scripts/src/qproj_scripts/__init__.py",
+    "dst": "scripts/src/qproj_scripts/__init__.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/__main__.py",
+    "dst": "scripts/src/qproj_scripts/__main__.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/cli.py",
+    "dst": "scripts/src/qproj_scripts/cli.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/_common.py",
+    "dst": "scripts/src/qproj_scripts/_common.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/build.py",
+    "dst": "scripts/src/qproj_scripts/build.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/play.py",
+    "dst": "scripts/src/qproj_scripts/play.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/check.py",
+    "dst": "scripts/src/qproj_scripts/check.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/clippy.py",
+    "dst": "scripts/src/qproj_scripts/clippy.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/bevy_lint.py",
+    "dst": "scripts/src/qproj_scripts/bevy_lint.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/deny.py",
+    "dst": "scripts/src/qproj_scripts/deny.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/test.py",
+    "dst": "scripts/src/qproj_scripts/test.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/coverage.py",
+    "dst": "scripts/src/qproj_scripts/coverage.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/ci.py",
+    "dst": "scripts/src/qproj_scripts/ci.py"
+  },
+  {
+    "src": "scripts/src/qproj_scripts/ra_check.py",
+    "dst": "scripts/src/qproj_scripts/ra_check.py"
+  },
+  { "src": "sync/deny.toml", "dst": "deny.toml" },
+  { "src": "sync/nextest.toml", "dst": ".config/nextest.toml" },
+  { "src": "sync/config.toml", "dst": ".cargo/config.toml" }
 ]
