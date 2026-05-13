@@ -48,8 +48,12 @@ jobs:
             cp "../infra/$src" "$dst"
           done
 
-          # Make scripts executable
-          chmod +x scripts/*.sh 2>/dev/null || true
+          # Generate the downstream justfile by concatenating the prelude
+          # (qproj definition pointing at the infra repo via uvx + git+url)
+          # with shared.just (the recipe bodies). This keeps the recipes
+          # as a single source of truth in infra/just/shared.just while
+          # letting downstreams ship a single justfile.
+          cat ../infra/just/downstream-prelude.just ../infra/just/shared.just > justfile
 
           # Stage copied files so Nix can see them in the git repo
           git add -A

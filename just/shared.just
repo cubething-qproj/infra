@@ -1,9 +1,11 @@
 # ------------------------------------------
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # -------------------------------- 𝒒𝒑𝒓𝒐𝒋 --
-
-scripts := parent_directory(canonicalize(justfile())) / "scripts"
-qproj := "uv run --project " + quote(scripts) + " qproj-scripts"
+#
+# Recipes that wrap the qproj-scripts CLI. Consumers of this file
+# (metarepo.just, downstream.just) must define `qproj` themselves --
+# typically as `uv run --project <local-scripts>` for the metarepo and
+# `uvx --from git+...` for downstreams.
 
 # Build the workspace.
 build *args:

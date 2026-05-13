@@ -9,13 +9,14 @@ import 'infra/main/just/shared.just'
 mod ws 'infra/main/just/ws.justfile'
 
 scripts := parent_directory(canonicalize(justfile())) / "infra/main/scripts"
+qproj := "uv run --project " + quote(scripts) + " qproj-scripts"
 
 _default:
     @just --justfile {{ justfile() }} --list --unsorted
 
 # Regenerate this justfile from infra template.
 self-update:
-    cp infra/main/metarepo.just justfile
+    cp infra/main/just/metarepo.just justfile
 
 # Switch a repo's `active` symlink to an existing worktree branch.
 switch-branch repo branch:
