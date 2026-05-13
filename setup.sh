@@ -122,6 +122,7 @@ export PRIMARY_REPOS="${REPOS[*]}"
 export DOWNSTREAM_REPOS="${DOWNSTREAM[*]}"
 export GH_TOKEN=\$(gh auth token 2>/dev/null || echo "")
 export NIXPKGS_ALLOW_UNFREE=1
+export LOCAL=1
 
 # GPU-variant autodetected by setup.sh. Override by editing the suffix
 # (e.g. drop '#nvidia' for the default shell, or change to a different

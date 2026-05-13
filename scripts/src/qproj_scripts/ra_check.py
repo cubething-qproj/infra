@@ -1,30 +1,20 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#   "typer>=0.12",
-# ]
-# ///
 """Emit Clippy + bevy_lint diagnostics in JSON form for rust-analyzer.
-
-Invocation:
-  uv run --script infra/main/scripts/ra_check.py -- [CARGO_ARGS...]
 
 Configured in the editor as the ``check.overrideCommand`` so RA shows
 both Clippy lints and bevy_lint lints as inline diagnostics. Each linter
 gets an isolated target dir to avoid step-on-toes incremental rebuilds.
+
+Does not share command construction with :mod:`qproj_scripts.clippy` /
+:mod:`qproj_scripts.bevy_lint` because the JSON output flag, isolated
+target dirs, and direct ``bevy_lint`` driver invocation (vs ``bevy lint``)
+are RA-specific.
 """
 
 from __future__ import annotations
 
 import subprocess
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-import _common  # noqa: E402
-import typer  # noqa: E402
+import typer
 
 app = typer.Typer(
     add_completion=False,
@@ -36,7 +26,7 @@ app = typer.Typer(
 )
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Run Clippy then bevy_lint, both with JSON-rendered-ANSI diagnostics."""
     extra = list(ctx.args)
@@ -51,9 +41,10 @@ def main(ctx: typer.Context) -> None:
             *extra,
         ],
         stderr=subprocess.DEVNULL,
+        check=False,
     ).returncode
 
-    bevy_rc = _common.run(
+    bevy_rc = subprocess.run(
         [
             "bevy_lint",
             "--all-features",
@@ -61,12 +52,8 @@ def main(ctx: typer.Context) -> None:
             "--message-format=json-diagnostic-rendered-ansi",
             *extra,
         ],
-        check=False,
         stderr=subprocess.DEVNULL,
+        check=False,
     ).returncode
 
     raise typer.Exit(clippy_rc or bevy_rc)
-
-
-if __name__ == "__main__":
-    app()

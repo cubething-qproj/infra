@@ -1,28 +1,14 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#   "typer>=0.12",
-# ]
-# ///
 """Build the workspace.
 
-Invocation:
-  just build [CARGO_ARGS...]
-  uv run --script infra/main/scripts/build.py -- [CARGO_ARGS...]
-
 Thin wrapper over ``cargo build``. All extra arguments are forwarded.
+Pins ``RUSTC_WRAPPER=sccache`` for shared incremental cache hits.
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import typer
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-import _common  # noqa: E402
-import typer  # noqa: E402
+from qproj_scripts import _common
 
 app = typer.Typer(
     add_completion=False,
@@ -34,7 +20,7 @@ app = typer.Typer(
 )
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Run ``cargo build`` with any forwarded arguments."""
     result = _common.run(
@@ -43,7 +29,3 @@ def main(ctx: typer.Context) -> None:
         env_overrides={"RUSTC_WRAPPER": "sccache"},
     )
     raise typer.Exit(result.returncode)
-
-
-if __name__ == "__main__":
-    app()

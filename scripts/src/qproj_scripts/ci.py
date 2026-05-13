@@ -1,17 +1,6 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#   "typer>=0.12",
-# ]
-# ///
 """Run GitHub Actions workflows locally via ``act``.
 
-Invocation:
-  just ci [ACT_ARGS...]
-  uv run --script infra/main/scripts/ci.py -- [ACT_ARGS...]
-
-Boots a local artifact server in the background (idempotent — ignores
+Boots a local artifact server in the background (idempotent --- ignores
 ``docker run`` failure if the container already exists) and points act at
 it via the ``ACTIONS_RUNTIME_*`` env vars.
 """
@@ -19,13 +8,10 @@ it via the ``ACTIONS_RUNTIME_*`` env vars.
 from __future__ import annotations
 
 import subprocess
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+import typer
 
-import _common  # noqa: E402
-import typer  # noqa: E402
+from qproj_scripts import _common
 
 app = typer.Typer(
     add_completion=False,
@@ -37,7 +23,7 @@ app = typer.Typer(
 )
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Boot the artifact server (best-effort) and run ``act``."""
     docker_cmd = [
@@ -73,7 +59,3 @@ def main(ctx: typer.Context) -> None:
     ]
     result = _common.run(act_cmd, check=False)
     raise typer.Exit(result.returncode)
-
-
-if __name__ == "__main__":
-    app()

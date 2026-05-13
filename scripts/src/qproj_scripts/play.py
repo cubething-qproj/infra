@@ -1,18 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#   "typer>=0.12",
-# ]
-# ///
 """Run a freshly-built quell binary, with ergonomic local + remote (psync) modes.
-
-Invocation:
-  just play                              # builds + runs target/debug/quell
-  just play -p PACKAGE                   # builds + runs target/debug/PACKAGE
-  just play -x EXAMPLE                   # builds + runs target/debug/examples/EXAMPLE
-  just play PATH                         # runs the given binary
-  uv run --script infra/main/scripts/play.py -- [FLAGS] [PATH]
 
 Local mode (no ``$SSH_CLIENT``):
   Re-adds ``target/debug/deps`` to ``LD_LIBRARY_PATH`` so dylib-feature builds
@@ -35,10 +21,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+import typer
 
-import _common  # noqa: E402
-import typer  # noqa: E402
+from qproj_scripts import _common
 
 app = typer.Typer(
     add_completion=False,
@@ -63,11 +48,11 @@ def _default_assets() -> Path:
     against (i.e. switching worktrees with ``just ws wt switch quell ...``
     repoints both code and assets in lockstep).
     """
-    repo_root = _common.script_dir().parent
-    metarepo = repo_root.parent.parent / "infra"
-    if metarepo.is_dir():
-        return repo_root.parent.parent / "quell" / "active" / "assets"
-    return repo_root / "assets"
+    infra_main = _common.infra_main_dir()
+    metarepo_root = infra_main.parent.parent
+    if (metarepo_root / "infra").is_dir():
+        return metarepo_root / "quell" / "active" / "assets"
+    return infra_main / "assets"
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +222,7 @@ def _resolve_nixgl(override: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     example: str | None = typer.Option(
@@ -334,7 +319,3 @@ def main(
     _common.echo(final, env_overrides={"LD_LIBRARY_PATH": run_ld_path})
     os.environ["LD_LIBRARY_PATH"] = run_ld_path
     os.execvp(final[0], final)
-
-
-if __name__ == "__main__":
-    app()

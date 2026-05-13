@@ -12,6 +12,11 @@
         },
       },
     },
+    "basedpyright": {
+      "settings": {
+        "logLevel": "Warn",
+      },
+    },
   },
   "languages": {
     "Python": {
