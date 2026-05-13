@@ -1,7 +1,7 @@
 [
   { "src": ".github/templates/ci.yml", "dst": ".github/workflows/ci.yml" },
   { "src": ".github/templates/flake.nix", "dst": "flake.nix" },
-  { "src": "sync/deny.toml", "dst": "deny.toml" },
-  { "src": "sync/nextest.toml", "dst": ".config/nextest.toml" },
-  { "src": "sync/config.toml", "dst": ".cargo/config.toml" }
+  { "src": "config/deny.toml", "dst": "deny.toml" },
+  { "src": "config/nextest.toml", "dst": ".config/nextest.toml" },
+  { "src": "config/config.toml", "dst": ".cargo/config.toml" }
 ]
