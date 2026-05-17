@@ -40,9 +40,9 @@ Worktrees should have one of the following prefixes:
 - doc/ # documentation
 - tests/ # testing - new tests, test edits, etc.
 
-The exception is the default branch, which is stored at .default-branch. You
-should not modify this branch, it is for reference only. Fetch and pull each
-time you reference it, so it always stays up to date.
+The exception is the default branch, `main`. you should not modify this branch,
+it is for reference only. Fetch and pull each time you reference it, so it
+always stays up to date.
 
 All worktrees should have relative git dirs. If you need to update git, then do so.
 

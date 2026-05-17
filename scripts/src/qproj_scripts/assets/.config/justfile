@@ -72,9 +72,9 @@ target dir:
 # Create a new worktree.
 add name:
     #!/bin/bash
-    if [[ ! {{ name }} =~ ^fix|feat|doc|tests ]]; then
+    if [[ ! {{ name }} =~ ^(fix|feat|doc|tests|release)/ ]]; then
         echo "Invalid branch name: {{ name }}"
-        echo "Valid branch names are: fix/*, feat/*, doc/*, tests/*"
+        echo "Valid branch names are: fix/*, feat/*, doc/*, tests/*, release/*"
         exit 1
     fi
     git fetch

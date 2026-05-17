@@ -71,7 +71,10 @@ def _symlink(target: Path, link: Path, *, dry: bool) -> None:
     log(f"symlink {link} -> {target}", level=level)
     if dry:
         return
-    link.unlink(missing_ok=True)
+    if link.is_symlink() or link.is_file():
+        link.unlink()
+    elif link.is_dir():
+        shutil.rmtree(link)
     link.symlink_to(target)
 
 
@@ -82,8 +85,9 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
     if repo_dir.is_dir():
         log(f"{repo_dir} exists", "info")
     else:
-        log(f"creating {repo_dir}", "dry")
-        repo_dir.mkdir(parents=True, exist_ok=True)
+        log(f"creating {repo_dir}", "dry" if dry else "info")
+        if not dry:
+            repo_dir.mkdir(parents=True, exist_ok=True)
 
     log("syncing .bare", "info")
     bare = repo_dir / ".bare"
@@ -166,13 +170,13 @@ def main(
     config_dir = org_dir / ".config"
 
     level = "dry" if dry else "info"
-    src = as_file(asset(".config"))
-    log(f"rm -rf {config_dir}", level)
-    if not dry:
-        shutil.rmtree(config_dir, ignore_errors=True)
-    log(f"cp -r {src} -> {config_dir}", level)
-    if not dry:
-        shutil.copytree(src, config_dir)
+    with as_file(asset(".config")) as src:
+        log(f"rm -rf {config_dir}", level)
+        if not dry:
+            shutil.rmtree(config_dir, ignore_errors=True)
+        log(f"cp -r {src} -> {config_dir}", level)
+        if not dry:
+            shutil.copytree(src, config_dir)
 
     for repo in all_repos:
         _sync_repo(repo, base_dir, config_dir, dry=dry, clobber=clobber)
