@@ -10,13 +10,7 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
 
-
-@app.callback(invoke_without_command=True)
 def main() -> None:
     """Run ``cargo deny check advisories bans sources``."""
     result = _common.run(

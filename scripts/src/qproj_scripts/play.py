@@ -25,16 +25,6 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={
-        "allow_extra_args": True,
-        "ignore_unknown_options": True,
-        "help_option_names": ["-h", "--help"],
-    },
-)
-
-
 # ---------------------------------------------------------------------------
 # Asset path resolution (metarepo vs standalone layout)
 # ---------------------------------------------------------------------------
@@ -218,7 +208,6 @@ def _resolve_nixgl(override: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-@app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     example: str | None = typer.Option(None, "-x", "--example", help="Cargo --example name."),

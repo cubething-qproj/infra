@@ -13,17 +13,7 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={
-        "allow_extra_args": True,
-        "ignore_unknown_options": True,
-        "help_option_names": ["-h", "--help"],
-    },
-)
 
-
-@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Run ``cargo llvm-cov nextest`` with the LLVM codegen backend."""
     args = ctx.args if ctx.args else ["--html", "--open"]

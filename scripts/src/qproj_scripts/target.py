@@ -15,13 +15,7 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
 
-
-@app.callback(invoke_without_command=True)
 def main(
     dir_: str = typer.Argument(..., metavar="DIR", help="Worktree dir, or 'default'."),
 ) -> None:

@@ -16,15 +16,9 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
-
 _VALID_PREFIX = re.compile(r"^(fix|feat|doc|tests|release)/")
 
 
-@app.callback(invoke_without_command=True)
 def main(
     name: str = typer.Argument(..., help="Branch/worktree name, e.g. feat/foo."),
 ) -> None:

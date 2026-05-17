@@ -23,11 +23,6 @@ import typer
 
 from qproj_scripts import _common, bevy_lint, clippy
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
-
 
 def _spawn(argv: list[str], env_overrides: dict[str, str]) -> subprocess.Popen[bytes]:
     """Echo ``argv`` and ``Popen`` it with ``env_overrides`` layered on os.environ."""
@@ -36,7 +31,6 @@ def _spawn(argv: list[str], env_overrides: dict[str, str]) -> subprocess.Popen[b
     return subprocess.Popen(argv, env=env)
 
 
-@app.callback(invoke_without_command=True)
 def main(
     packages: list[str] | None = typer.Argument(
         None,
