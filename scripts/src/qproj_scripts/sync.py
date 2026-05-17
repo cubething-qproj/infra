@@ -16,36 +16,42 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Literal
 
 import typer
-
-from qproj_scripts import _common
 
 app = typer.Typer(
     add_completion=False,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
+DEFAULT_BRANCH = "main"
 
-def log(msg: str, level: Literal["warn", "miss", "info", "ok"]) -> None:
+
+def asset(path: str | Path) -> Traversable:
+    return files("qproj_scripts").joinpath(Path("assets") / path)
+
+
+def log(msg: str, level: Literal["warn", "error", "info", "dry"]) -> None:
     prefix = ""
     match level:
         case "warn":
-            prefix = "\x1b[33m[warn]"
-        case "miss":
-            prefix = "\x1b[31m[miss]"
+            prefix = "\x1b[33m[warn] "
+        case "error":
+            prefix = "\x1b[31m[miss] "
         case "info":
-            prefix = "\x1b[34m[info]"
-        case "ok":
-            prefix = "\x1b[32m[ok]"
+            prefix = "\x1b[34m[info] "
+        case "dry":
+            prefix = "\x1b[38;5;245m[dry] "
 
-    print(f"{prefix}{msg}\x1b[0m", file=sys.stderr, flush=True)
+    typer.echo(f"{prefix}{msg}\x1b[0m", file=sys.stderr)
 
 
 def run(cmd: Sequence[str], *, dry: bool, check: bool = True) -> int:
-    _common.echo(list(cmd))
+    level = "dry" if dry else "info"
+    log(" ".join(cmd), level=level)
     if dry:
         return 0
     result = subprocess.run(list(cmd), check=check)
@@ -53,51 +59,39 @@ def run(cmd: Sequence[str], *, dry: bool, check: bool = True) -> int:
 
 
 def write_file(path: Path, content: str, *, dry: bool) -> None:
-    _common.echo(["sh", "-c", f"printf %s {content!r} > {path}"])
+    level = "dry" if dry else "info"
+    log(f"write {path}", level=level)
     if dry:
         return
     path.write_text(content)
 
 
 def _symlink(target: Path, link: Path, *, dry: bool) -> None:
-    """Echo + ``ln -sfT target link`` (no-op in dry-run mode)."""
-    _common.echo(["ln", "-sf", "-T", str(target), str(link)])
+    level = "dry" if dry else "info"
+    log(f"symlink {link} -> {target}", level=level)
     if dry:
         return
-    if link.is_symlink() or link.exists():
-        link.unlink()
+    link.unlink(missing_ok=True)
     link.symlink_to(target)
 
 
-def _copy_best_effort(src: Path, dst: Path, *, dry: bool) -> None:
-    """Echo + copy ``src`` to ``dst``; swallow errors (matches ``|| true``)."""
-    _common.echo(["cp", str(src), str(dst)])
-    if dry:
-        return
-    try:
-        shutil.copyfile(src, dst)
-    except OSError as exc:
-        log(f"  (copy skipped: {exc})")
-
-
 def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobber: bool) -> None:
-    dir_ = base_dir / repo
-    print(f"\n=== {repo} ===", flush=True)
+    repo_dir = base_dir / repo
+    typer.echo(f"\n=== {repo} ===")
 
-    if dir_.is_dir():
-        log(f"{dir_} exists", "ok")
+    if repo_dir.is_dir():
+        log(f"{repo_dir} exists", "info")
     else:
-        log(f"{dir_} missing", "miss")
-        run(["mkdir", "-p", str(dir_)], dry=dry)
-
-    bare = dir_ / ".bare"
-    if not bare.is_dir():
-        log(".bare missing", "miss")
-        run(["git", "clone", "--bare", f"https://github.com/{repo}", str(bare)], dry=dry)
-    else:
-        log(".bare exists", "ok")
+        log(f"creating {repo_dir}", "dry")
+        repo_dir.mkdir(parents=True, exist_ok=True)
 
     log("syncing .bare", "info")
+    bare = repo_dir / ".bare"
+    if not bare.is_dir():
+        run(["git", "clone", "--bare", f"https://github.com/{repo}", str(bare)], dry=dry)
+    else:
+        log(".bare exists", "info")
+
     run(
         [
             "git",
@@ -109,45 +103,44 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
         ],
         dry=dry,
     )
+
+    write_file(repo_dir / ".git", "gitdir: ./.bare\n", dry=dry)
     run(["git", "-C", str(bare), "fetch", "--all", "--prune"], dry=dry)
-    write_file(dir_ / ".git", "gitdir: ./.bare\n", dry=dry)
     run(["git", "-C", str(bare), "config", "worktree.useRelativePaths", "true"], dry=dry)
     run(["git", "-C", str(bare), "worktree", "repair"], dry=dry)
 
-    log("[info] syncing config files")
-    _symlink(config_dir / "AGENTS.md", dir_ / "AGENTS.md", dry=dry)
-    _symlink(config_dir / "justfile", dir_ / "justfile", dry=dry)
-    _copy_best_effort(config_dir / "pyrightconfig.json", dir_ / "pyrightconfig.json", dry=dry)
-
-    default_branch = _default_branch(repo)
-    write_file(dir_ / ".default-branch", f"{default_branch}\n", dry=dry)
-
-    log("[info] syncing default branch")
-    wt = dir_ / default_branch
+    log(f"syncing {DEFAULT_BRANCH}", "info")
+    wt = repo_dir / DEFAULT_BRANCH
     if not wt.is_dir():
-        log(f"[miss] {wt} missing")
-        run(["git", "-C", str(bare), "worktree", "add", str(wt), default_branch], dry=dry)
+        log(f"{wt} missing", "info")
+        run(["git", "-C", str(bare), "worktree", "add", str(wt), DEFAULT_BRANCH], dry=dry)
     else:
-        log(f"[ok] {wt} exists")
+        log(f"{wt} exists", "info")
 
-    status = subprocess.run(
-        ["git", "-C", str(wt), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
+    status = ""
+    if not dry:
+        status = subprocess.run(
+            ["git", "-C", str(wt), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
     if status:
         if clobber:
-            log(f"[warn] {wt} has uncommitted changes. Clobbering...")
+            log(f"{wt} has uncommitted changes. Clobbering...", "warn")
         else:
-            log(f"[warn] {wt} has uncommitted changes. Re-run with --clobber to overwrite.")
+            log(f"{wt} has uncommitted changes. Re-run with --clobber to overwrite.", "error")
             if not dry:
                 raise typer.Exit(code=1)
     else:
-        log(f"[ok] {wt} clean")
+        log(f"{wt} clean", "info")
 
-    run(["git", "-C", str(wt), "reset", "--hard", f"origin/{default_branch}"], dry=dry)
+    run(["git", "-C", str(wt), "reset", "--hard", f"origin/{DEFAULT_BRANCH}"], dry=dry)
     run(["git", "-C", str(wt), "clean", "-fd"], dry=dry)
+
+    log("Symlinking config files", "info")
+    for asset_ in asset(".config").iterdir():
+        _symlink(config_dir / asset_.name, repo_dir / asset_.name, dry=dry)
 
 
 @app.callback(invoke_without_command=True)
@@ -162,13 +155,24 @@ def main(
     """Sync the local clone-tree of workflow consumer repos."""
     home = Path.home()
     base_dir = Path(os.environ.get("BASE_DIR", str(home / "repos")))
-    downstream_repos = (
-        files("qproj_scripts").joinpath("assets/downstream-repos.json").read_text("utf8")
-    )
+    downstream_repos = asset("downstream-repos.json").read_text("utf8")
     downstream_repos = json.loads(downstream_repos)
     dry = not execute
 
     all_repos: list[str] = [str(r) for r in downstream_repos] + ["cubething-qproj/infra"]
+
+    log("syncing shared config files", "info")
+    org_dir = base_dir / "cubething-qproj"
+    config_dir = org_dir / ".config"
+
+    level = "dry" if dry else "info"
+    src = Path(str(asset(".config")))
+    log(f"rm -rf {config_dir}", level)
+    if not dry:
+        shutil.rmtree(config_dir, ignore_errors=True)
+    log(f"cp -r {src} -> {config_dir}", level)
+    if not dry:
+        shutil.copytree(src, config_dir)
 
     for repo in all_repos:
         _sync_repo(repo, base_dir, config_dir, dry=dry, clobber=clobber)

@@ -5,6 +5,7 @@
 QPROJ_REF := env("QPROJ_SCRIPTS_REF", "main")
 QPROJ_GIT_URL := "git+https://github.com/cubething-qproj/infra.git@" + QPROJ_REF + "#subdirectory=scripts"
 qproj := "uvx --refresh --from " + quote(QPROJ_GIT_URL) + " qproj-scripts"
+DEFAULT_BRANCH := env("DEFAULT_BRANCH", "main")
 
 # Build the workspace.
 build *args:
@@ -53,3 +54,28 @@ ra-check *args:
 # Set up and synchronize proj repos.
 sync *args:
     {{ qproj }} sync {{ args }}
+
+# Change where 'active' points to.
+target dir:
+    #!/bin/bash
+    dir={{ dir }}
+    if [ "${dir}" == "default" ]; then
+        dir={{ DEFAULT_BRANCH }}
+    fi
+    if [ ! -d "${dir}" ]; then
+        echo "Directory ${dir} does not exist"
+        exit 1
+    fi
+    ln -s "${dir}" -T active -f
+    ls active -l
+
+# Create a new worktree.
+add name:
+    #!/bin/bash
+    if [[ ! {{ name }} =~ ^fix|feat|doc|tests ]]; then
+        echo "Invalid branch name: {{ name }}"
+        echo "Valid branch names are: fix/*, feat/*, doc/*, tests/*"
+        exit 1
+    fi
+    git fetch
+    git worktree add {{ name }} -b {{ name }} "origin/{{ DEFAULT_BRANCH }}"
