@@ -8,17 +8,14 @@ reference see [`docs/bevy-best-practices/`](docs/bevy-best-practices/).
 
 ## Repo layout
 
-This is a **metarepo** — a workspace assembled from independent Rust
-crates, each living in its own bare-plus-worktree git layout:
+Work is done inside a _metarepo,_ a workspace assembled from independent crates,
+each living in its own bare-plus-worktree git layout.
 
 ```
 cubething-qproj/
-├── AGENTS.md              # agent rules (always-on context)
-├── Cargo.toml             # symlink → infra/main/Cargo.toml
-├── justfile               # symlink → infra/main/metarepo.just
-├── docs/
-│   └── bevy-best-practices/   # reference material, on-demand reads
-├── infra/                 # workspace infrastructure (own repo)
+├── AGENTS.md              
+├── Cargo.toml             # symlink -> infra/main/Cargo.toml
+├── infra/                 # workspace infrastructure 
 ├── quell/active/          # the game crate
 ├── q_term/active/         # in-game terminal
 ├── q_screens/active/      # screen/scene lifecycle library
@@ -36,84 +33,22 @@ inside each crate directory is:
 └── active → main # symlink the workspace consumes
 ```
 
----
-
-## Getting set up
-
-1. Clone the metarepo (this includes only the orchestration scripts):
-   ```sh
-   git clone <metarepo-url>
-   cd cubething-qproj
-   ```
-2. Run the setup script from `infra/` to materialize each crate's
-   bare+worktree layout. Ask the operator if you need access to the
-   private remotes.
-3. Use a Nix shell or install the toolchain manually. The repo pins a
-   specific nightly Rust (required by `bevy_lint`) — see
-   `infra/main/flake.nix` or the toolchain pin in
-   [`docs/bevy-best-practices/workspace-conventions.md`](docs/bevy-best-practices/workspace-conventions.md).
-4. Verify your setup:
-   ```sh
-   just check
-   just test
-   ```
+The AGENTS.md has a brief overview of branch naming conventions.
 
 ---
 
-## Day-to-day commands
-
-Everything is a `just` recipe. Run `just` with no arguments for the full
-list; run `just ws` for workspace manipulation recipes. The most common
-ones for editing crates:
-
-| Recipe | What it does |
-|---|---|
-| `just play [args]` | Run the game (`quell`) |
-| `just build [args]` | Build the workspace |
-| `just check [args]` | clippy + bevy_lint across the workspace |
-| `just clippy [args]` | clippy alone |
-| `just bevy-lint [args]` | bevy_lint alone |
-| `just test [args]` | nextest test runner |
-| `just coverage [args]` | test coverage report |
-| `just fix [args]` | clippy --fix |
-| `just deny` | cargo-deny dependency audit |
-| `just ci [args]` | run CI locally via `act` |
-
-### Workspace manipulation (`just ws ...`)
-
-Cross-repo and worktree operations live under `just ws`. These wrap the
-`pj` scripts in `infra/main/pj/scripts/`. **Never** repoint an `active`
-symlink by hand — use `just ws wt switch`.
-
-| Recipe | What it does |
-|---|---|
-| `just ws wt add <repo> <branch>` | Create a worktree on `<branch>` and repoint `<repo>/active` to it. Branch is created from current `active` HEAD if it doesn't exist. Add `--no-switch` to skip the symlink update. |
-| `just ws wt switch <repo> <wt>` | Repoint `<repo>/active` to an existing worktree. |
-| `just ws wt rm <repo> <branch>` | Remove a worktree. Refuses `main` / current `active`. |
-| `just ws wt ls [repo]` | List worktrees (all repos if no arg). |
-| `just ws wt status` | Show the current `active` symlink target for every repo. |
-| `just ws doctor` | Workspace health check across primary repos. |
-| `just ws clean` | Clean stale worktrees / branches across primary repos. |
-| `just ws install-git` | Install shared git hooks. |
-| `just ws venv [args]` | Point basedpyright at a Python interpreter. |
-| `just self-update` | Regenerate the metarepo justfile from the `infra` template. |
-
-**Common worktree flow:**
+## Quick start
 
 ```sh
-just ws wt add q_term feat/cursor-blink   # creates and switches active
-cd q_term/active                           # work on the new branch
-# ... edit, commit ...
-just ws wt switch q_term main              # switch back when done
-just ws wt rm     q_term feat/cursor-blink # delete the worktree
+git clone https://github.com/cubething-qproj/infra --bare "$REPOS_ROOT/cubething-qproj/infra/.bare" 
+echo "gitdir: ./.bare" > "$REPOS_ROOT/cubething-qproj/infra"
+git -C "$REPOS_ROOT" worktree add main main
+cd "$REPOS_ROOT/cubething-qproj" && ./infra/main/setup.sh
+just sync
 ```
 
-Never invoke raw `cargo` for an operation that has a recipe — the
-recipes wrap project-specific arguments and lint configuration. See
-[`docs/bevy-best-practices/ci-and-tooling.md`](docs/bevy-best-practices/ci-and-tooling.md)
-for the full catalog and rationale.
-
----
+All primary actions are `just` recipes. Run `just` with no arguments for the full
+list.
 
 ## Branching and commits
 

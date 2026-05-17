@@ -24,6 +24,7 @@ from qproj_scripts import (
     deny,
     play,
     ra_check,
+    sync,
     test,
 )
 
@@ -47,6 +48,11 @@ app.add_typer(
     ra_check.app,
     name="ra-check",
     help="Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.",
+)
+app.add_typer(
+    sync.app,
+    name="sync",
+    help="Sync the local clone-tree of workflow consumer repos.",
 )
 
 
