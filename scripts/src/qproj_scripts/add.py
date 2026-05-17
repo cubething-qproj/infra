@@ -1,28 +1,24 @@
-"""Create a new git worktree branched off ``origin/$DEFAULT_BRANCH``.
+"""Create a new git worktree branched off ``$DEFAULT_REMOTE/$DEFAULT_BRANCH`` (origin/main).
 
 Validates that the requested branch name uses one of the canonical
 prefixes (``fix/``, ``feat/``, ``doc/``, ``tests/``, ``release/``),
 fetches from the remote, then runs ``git worktree add`` with a fresh
-branch based on ``origin/<DEFAULT_BRANCH>``.
+branch based on ``<DEFAULT_REMOTE>/<DEFAULT_BRANCH>``.
 """
 
 from __future__ import annotations
-
-import os
-import re
 
 import typer
 
 from qproj_scripts import _common
 
-_VALID_PREFIX = re.compile(r"^(fix|feat|doc|tests|release)/")
-
 
 def main(
     name: str = typer.Argument(..., help="Branch/worktree name, e.g. feat/foo."),
 ) -> None:
-    """Create a worktree on a new branch ``NAME`` off ``origin/$DEFAULT_BRANCH``."""
-    if not _VALID_PREFIX.match(name):
+    """Create a worktree on a new branch ``NAME``
+    off ``$DEFAULT_ORIGIN/$DEFAULT_BRANCH`` (origin/main)."""
+    if not _common.PREFIX_RE.match(name):
         typer.echo(f"Invalid branch name: {name}", err=True)
         typer.echo(
             "Valid branch names are: fix/*, feat/*, doc/*, tests/*, release/*",
@@ -30,9 +26,15 @@ def main(
         )
         raise typer.Exit(code=1)
 
-    default_branch = os.environ.get("DEFAULT_BRANCH", "main")
-
     _common.run(["git", "fetch"])
     _common.run(
-        ["git", "worktree", "add", name, "-b", name, f"origin/{default_branch}"],
+        [
+            "git",
+            "worktree",
+            "add",
+            name,
+            "-b",
+            name,
+            f"{_common.DEFAULT_REMOTE}/{_common.DEFAULT_BRANCH}",
+        ],
     )

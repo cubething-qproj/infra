@@ -65,3 +65,7 @@ target dir:
 # Create a new worktree.
 add name:
     {{ qproj }} add {{ name }}
+
+# Prune merged branches.
+prune:
+    {{ qproj }} prune

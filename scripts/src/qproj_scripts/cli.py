@@ -31,6 +31,7 @@ from qproj_scripts import (
     coverage,
     deny,
     play,
+    prune,
     ra_check,
     sync,
     target,
@@ -85,6 +86,7 @@ _register(
 )
 _register("target", target.main, ctx=_STRICT, help="Repoint ./active at a worktree dir.")
 _register("add", add.main, ctx=_STRICT, help="Create a new worktree off origin/$DEFAULT_BRANCH.")
+_register("prune", prune.main, ctx=_STRICT, help="Clean up all already-merged worktrees.")
 
 
 @app.command(
@@ -96,4 +98,4 @@ def fix(ctx: typer.Context) -> None:
     """Run ``cargo clippy --fix --all-features --target-dir=target/clippy``."""
     argv, env = clippy.cmd(["--fix", *ctx.args])
     result = _common.run(argv, env_overrides=env or None, check=False)
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]
