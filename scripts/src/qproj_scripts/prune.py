@@ -47,14 +47,6 @@ def main(
                 continue
             branch = res.stdout.strip()
 
-            res = run(
-                shlex.split(
-                    f"git merge-base --is-ancestor {branch} {DEFAULT_REMOTE}/{DEFAULT_BRANCH}"
-                ),
-                capture_output=True,
-            )
-            merged = res is not None and res.returncode == 0
-
             res = run(shlex.split(f"git -C {branch} status --porcelain"), capture_output=True)
             clean = res is not None and res.stdout == ""
             if not clean:
@@ -64,12 +56,21 @@ def main(
             res = run(
                 shlex.split(f"git rev-list {branch} ^{DEFAULT_REMOTE}/{branch}"),
                 capture_output=True,
+                check=False,
             )
-            synced = res is not None and res.stdout == ""
+            synced = res is not None and (res.returncode == 0 or res.stdout == "")
+            log(f"{branch} is synced: {synced}")
             if not synced:
                 log(f"{branch} is not synced. Skipping.", level="warn")
                 continue
 
+            res = run(
+                shlex.split(
+                    f"git merge-base --is-ancestor {branch} {DEFAULT_REMOTE}/{DEFAULT_BRANCH}"
+                ),
+                capture_output=True,
+            )
+            merged = res is not None and res.returncode == 0
             if merged:
                 log(f"Removing {branch}")
                 if not dry:
