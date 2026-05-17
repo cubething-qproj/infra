@@ -16,4 +16,4 @@ def main(ctx: typer.Context) -> None:
     base = ["cargo", "nextest"]
     cmd = base + (ctx.args if ctx.args else ["r", "--workspace"])
     result = _common.run(cmd, check=False, env_overrides={"RUSTC_WRAPPER": "sccache"})
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

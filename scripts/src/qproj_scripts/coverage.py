@@ -22,4 +22,4 @@ def main(ctx: typer.Context) -> None:
         env_overrides={"RUSTFLAGS": "-Zcodegen-backend=llvm"},
         check=False,
     )
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

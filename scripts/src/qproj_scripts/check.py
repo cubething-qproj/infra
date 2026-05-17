@@ -26,7 +26,7 @@ from qproj_scripts import _common, bevy_lint, clippy
 
 def _spawn(argv: list[str], env_overrides: dict[str, str]) -> subprocess.Popen[bytes]:
     """Echo ``argv`` and ``Popen`` it with ``env_overrides`` layered on os.environ."""
-    _common.echo(argv, env_overrides=env_overrides or None)
+    _common.log(" ".join(argv), None)
     env = {**os.environ, **env_overrides} if env_overrides else None
     return subprocess.Popen(argv, env=env)
 

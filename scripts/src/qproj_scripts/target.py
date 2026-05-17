@@ -20,7 +20,7 @@ def retarget(target: str) -> None:
         target = os.environ.get("DEFAULT_BRANCH", "main")
 
     if not Path(target).is_dir():
-        typer.echo(f"Directory {target} does not exist", err=True)
+        _common.log(f"Directory {target} does not exist", level="error")
         raise typer.Exit(code=1)
 
     _common.run(["ln", "-s", target, "-T", "active", "-f"])

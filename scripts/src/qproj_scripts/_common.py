@@ -1,22 +1,58 @@
-"""Shared stdlib-only helpers for the qproj_scripts verb modules.
-
-Provides:
-
-- :func:`run` / :func:`echo` — subprocess wrapper that prints a shell-quoted
-  preview of the command (``set -x`` style) before running it, with
-  optional environment overrides layered on ``os.environ``.
-- :func:`scripts_dir` / :func:`infra_main_dir` — path helpers so verb
-  modules can locate sibling resources without depending on cwd.
-- :func:`rustc_sysroot` — cached lookup of the active toolchain sysroot.
-"""
-
 from __future__ import annotations
 
 import os
-import shlex
+import re
 import subprocess
 import sys
+from collections.abc import Sequence
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
+from typing import Literal
+
+import typer
+
+DEFAULT_BRANCH = os.environ.get("DEFAULT_BRANCH", "main")
+DEFAULT_REMOTE = os.environ.get("DEFAULT_REMOTE", "origin")
+VALID_PREFIX = ["fix", "feat", "doc", "tests", "release"]
+PREFIX_RE = re.compile(rf"^({'|'.join(VALID_PREFIX)})/")
+
+
+def asset(path: str | Path) -> Traversable:
+    return files("qproj_scripts").joinpath(Path("assets") / path)
+
+
+def log(msg: str, level: Literal["warn", "error", "info", "dry"] | None = None) -> None:
+    prefix = ""
+    match level:
+        case "warn":
+            prefix = "\x1b[33m[warn] "
+        case "error":
+            prefix = "\x1b[31m[error] "
+        case "info":
+            prefix = "\x1b[34m[info] "
+        case "dry":
+            prefix = "\x1b[38;5;245m[dry] "
+
+    typer.echo(f"{prefix}{msg}\x1b[0m", file=sys.stderr)
+
+
+def run(
+    cmd: Sequence[str],
+    *,
+    check: bool = True,
+    dry: bool = False,
+    env_overrides: dict[str, str] | None = None,
+    **kwargs,
+) -> subprocess.CompletedProcess[str] | None:
+    level = "dry" if dry else "info"
+    log(" ".join(cmd), level=level)
+    if dry:
+        return None
+    env = None
+    if env_overrides is not None:
+        env = {**os.environ, **env_overrides}
+    return subprocess.run(list(cmd), check=check, env=env, text=True, **kwargs)  # pyright: ignore[reportCallIssue]
 
 
 def scripts_dir() -> Path:
@@ -28,29 +64,6 @@ def scripts_dir() -> Path:
 def infra_main_dir() -> Path:
     """Return ``infra/main`` (parent of :func:`scripts_dir`)."""
     return scripts_dir().parent
-
-
-def echo(cmd: list[str], *, env_overrides: dict[str, str] | None = None) -> None:
-    """Print a shell-quoted preview of ``cmd`` to stderr (``set -x`` style)."""
-    prefix = ""
-    if env_overrides:
-        prefix = " ".join(f"{k}={shlex.quote(v)}" for k, v in env_overrides.items()) + " "
-    print(f"+ {prefix}{shlex.join(cmd)}", file=sys.stderr, flush=True)
-
-
-def run(
-    cmd: list[str],
-    *,
-    env_overrides: dict[str, str] | None = None,
-    check: bool = True,
-    **kwargs: object,
-) -> subprocess.CompletedProcess[str]:
-    """Run ``cmd`` after echoing it. ``env_overrides`` is layered on ``os.environ``."""
-    echo(cmd, env_overrides=env_overrides)
-    env = None
-    if env_overrides is not None:
-        env = {**os.environ, **env_overrides}
-    return subprocess.run(cmd, check=check, env=env, **kwargs)  # pyright: ignore[reportCallIssue, reportArgumentType]
 
 
 def rustc_sysroot() -> str:

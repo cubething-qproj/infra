@@ -25,4 +25,4 @@ def main(ctx: typer.Context) -> None:
     """Run ``cargo clippy --all-features --target-dir=target/clippy``."""
     argv, env = cmd(ctx.args)
     result = _common.run(argv, env_overrides=env or None, check=False)
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

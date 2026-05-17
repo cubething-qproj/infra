@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import typer
 
-from qproj_scripts import _common
+from qproj_scripts._common import DEFAULT_BRANCH, DEFAULT_REMOTE, PREFIX_RE, log, run
 
 
 def main(
@@ -18,16 +18,13 @@ def main(
 ) -> None:
     """Create a worktree on a new branch ``NAME``
     off ``$DEFAULT_ORIGIN/$DEFAULT_BRANCH`` (origin/main)."""
-    if not _common.PREFIX_RE.match(name):
-        typer.echo(f"Invalid branch name: {name}", err=True)
-        typer.echo(
-            "Valid branch names are: fix/*, feat/*, doc/*, tests/*, release/*",
-            err=True,
-        )
+    if not PREFIX_RE.match(name):
+        log(f"Invalid branch name: {name}", level="error")
+        log("Valid branch names are: fix/*, feat/*, doc/*, tests/*, release/*", level="error")
         raise typer.Exit(code=1)
 
-    _common.run(["git", "fetch"])
-    _common.run(
+    run(["git", "fetch"])
+    run(
         [
             "git",
             "worktree",
@@ -35,6 +32,6 @@ def main(
             name,
             "-b",
             name,
-            f"{_common.DEFAULT_REMOTE}/{_common.DEFAULT_BRANCH}",
+            f"{DEFAULT_REMOTE}/{DEFAULT_BRANCH}",
         ],
     )

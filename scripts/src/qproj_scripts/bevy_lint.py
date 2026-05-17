@@ -40,4 +40,4 @@ def main(ctx: typer.Context) -> None:
     """Run ``bevy lint --all-features --target-dir=target/bevy_lint``."""
     argv, env = cmd(ctx.args)
     result = _common.run(argv, env_overrides=env, check=False)
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

@@ -30,7 +30,7 @@ def main(ctx: typer.Context) -> None:
         "AUTH_KEY=foo",
         "ghcr.io/jefuller/artifact-server:latest",
     ]
-    _common.echo(docker_cmd)
+    _common.log(" ".join(docker_cmd))
     subprocess.run(docker_cmd, check=False)  # idempotent: tolerate "already exists"
 
     act_cmd = [
@@ -48,4 +48,4 @@ def main(ctx: typer.Context) -> None:
         *ctx.args,
     ]
     result = _common.run(act_cmd, check=False)
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

@@ -32,7 +32,7 @@ def main(
         shlex.split(f"git -C {DEFAULT_BRANCH} pull {DEFAULT_REMOTE} {DEFAULT_BRANCH} --ff"), dry=dry
     )
     if ff is not None and ff.returncode != 0:
-        typer.echo("Failed to pull default branch.")
+        log("Failed to pull default branch.", level="error")
         raise typer.Exit(code=1)
     retarget("default")
 
