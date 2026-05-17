@@ -28,4 +28,4 @@ def main() -> None:
         ],
         check=False,
     )
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

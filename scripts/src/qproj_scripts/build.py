@@ -24,4 +24,4 @@ def main(ctx: typer.Context) -> None:
     """Run ``cargo build`` with any forwarded arguments."""
     argv, env = cmd(ctx.args)
     result = _common.run(argv, env_overrides=env, check=False)
-    raise typer.Exit(result.returncode)
+    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

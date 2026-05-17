@@ -15,17 +15,19 @@ import typer
 from qproj_scripts import _common
 
 
-def main(
-    dir_: str = typer.Argument(..., metavar="DIR", help="Worktree dir, or 'default'."),
-) -> None:
-    """Repoint ``./active`` at ``DIR`` (or ``$DEFAULT_BRANCH`` for ``default``)."""
-    target = dir_
+def retarget(target: str) -> None:
     if target == "default":
         target = os.environ.get("DEFAULT_BRANCH", "main")
 
     if not Path(target).is_dir():
-        typer.echo(f"Directory {target} does not exist", err=True)
+        _common.log(f"Directory {target} does not exist", level="error")
         raise typer.Exit(code=1)
 
     _common.run(["ln", "-s", target, "-T", "active", "-f"])
     _common.run(["ls", "active", "-l"])
+
+
+def main(
+    dir_: str = typer.Argument(..., metavar="DIR", help="Worktree dir, or 'default'."),
+) -> None:
+    retarget(dir_)

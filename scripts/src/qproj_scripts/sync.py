@@ -13,44 +13,12 @@ import json
 import os
 import shutil
 import subprocess
-import sys
-from collections.abc import Sequence
-from importlib.resources import as_file, files
-from importlib.resources.abc import Traversable
+from importlib.resources import as_file
 from pathlib import Path
-from typing import Literal
 
 import typer
 
-DEFAULT_BRANCH = "main"
-
-
-def asset(path: str | Path) -> Traversable:
-    return files("qproj_scripts").joinpath(Path("assets") / path)
-
-
-def log(msg: str, level: Literal["warn", "error", "info", "dry"]) -> None:
-    prefix = ""
-    match level:
-        case "warn":
-            prefix = "\x1b[33m[warn] "
-        case "error":
-            prefix = "\x1b[31m[miss] "
-        case "info":
-            prefix = "\x1b[34m[info] "
-        case "dry":
-            prefix = "\x1b[38;5;245m[dry] "
-
-    typer.echo(f"{prefix}{msg}\x1b[0m", file=sys.stderr)
-
-
-def run(cmd: Sequence[str], *, dry: bool, check: bool = True) -> int:
-    level = "dry" if dry else "info"
-    log(" ".join(cmd), level=level)
-    if dry:
-        return 0
-    result = subprocess.run(list(cmd), check=check)
-    return result.returncode
+from qproj_scripts._common import DEFAULT_BRANCH, DEFAULT_REMOTE, asset, log, run
 
 
 def write_file(path: Path, content: str, *, dry: bool) -> None:
@@ -128,8 +96,8 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
             "-C",
             str(bare),
             "config",
-            "remote.origin.fetch",
-            "+refs/heads/*:refs/remotes/origin/*",
+            f"remote.{DEFAULT_REMOTE}.fetch",
+            f"+refs/heads/*:refs/remotes/{DEFAULT_REMOTE}/*",
         ],
         dry=dry,
     )
@@ -165,7 +133,7 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
     else:
         log(f"{wt} clean", "info")
 
-    run(["git", "-C", str(wt), "reset", "--hard", f"origin/{DEFAULT_BRANCH}"], dry=dry)
+    run(["git", "-C", str(wt), "reset", "--hard", f"{DEFAULT_REMOTE}/{DEFAULT_BRANCH}"], dry=dry)
     run(["git", "-C", str(wt), "clean", "-fd"], dry=dry)
 
     log("Symlinking config files", "info")

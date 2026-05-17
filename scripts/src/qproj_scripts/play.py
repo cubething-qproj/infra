@@ -290,6 +290,6 @@ def main(
     final.append(str(target_path))
     final.extend(shlex.split(cmd_args))
 
-    _common.echo(final, env_overrides={"LD_LIBRARY_PATH": run_ld_path})
+    _common.log(" ".join(final))
     os.environ["LD_LIBRARY_PATH"] = run_ld_path
     os.execvp(final[0], final)
