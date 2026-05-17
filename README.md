@@ -24,11 +24,9 @@ workspace config, Nix flake, CI, and dev tooling.
 ## Getting Started
 
 ```sh
-git clone https://github.com/cubething-qproj/infra --bare "$REPOS_ROOT/qproj/infra/.bare" 
-echo "gitdir: ./.bare" > "$REPOS_ROOT/qproj/infra"
-git -C "$REPOS_ROOT" worktree add main main
-cd "$REPOS_ROOT/qproj" && ./infra/main/setup.sh
-just check
+# Will sync to ~/repos/cubething-qproj.
+# Set BASE_DIR to change the base directory.
+uvx --refresh --from "git+https://github.com/cubething-qproj/infra.git@main#subdirectory=scripts" qproj-scripts sync
 ```
 
 ## Compatibility

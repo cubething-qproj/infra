@@ -1,6 +1,6 @@
-"""Sync the local clone-tree of nanvix/cubething workflow consumer repos.
+"""Sync the local clone-tree of consumer repos.
 
-For each repo listed in the upstream ``consumer-repos.json``,
+For each repo listed in ``assets/downstream-repos.json``,
 ensure ``$BASE_DIR/<repo>`` exists with the canonical bare + worktree layout:
 
 Defaults to dry-run; pass ``-x`` / ``--execute`` to actually mutate. Use
@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
-from importlib.resources import files
+from importlib.resources import as_file, files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Literal
@@ -166,7 +166,7 @@ def main(
     config_dir = org_dir / ".config"
 
     level = "dry" if dry else "info"
-    src = Path(str(asset(".config")))
+    src = as_file(asset(".config"))
     log(f"rm -rf {config_dir}", level)
     if not dry:
         shutil.rmtree(config_dir, ignore_errors=True)
