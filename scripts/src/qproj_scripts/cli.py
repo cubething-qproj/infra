@@ -10,7 +10,7 @@ sub-Typers become Click *groups*, and Click parses any leading ``-x`` on
 a group as an attempted subcommand name. Registering as a command makes
 each verb a Click *leaf*, where ``allow_extra_args`` /
 ``ignore_unknown_options`` actually take effect and pass-through args
-like ``just build -F dylib`` reach ``cargo`` intact.
+like ``qproj-scripts build -F dylib`` reach ``cargo`` intact.
 
 The only verb defined directly in this module is ``fix``, a thin alias
 for ``clippy --fix`` that reuses :func:`qproj_scripts.clippy.cmd`.

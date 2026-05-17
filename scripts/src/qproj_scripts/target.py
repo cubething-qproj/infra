@@ -1,7 +1,6 @@
 """Repoint the ``active`` symlink at a sibling worktree directory.
 
-This is the Python implementation of the ``just target`` recipe: it
-replaces ``./active`` with a symlink to ``<dir>`` (or ``$DEFAULT_BRANCH``
+Replaces ``./active`` with a symlink to ``<dir>`` (or ``$DEFAULT_BRANCH``
 when ``dir`` is the literal string ``default``), then prints the
 resulting symlink for confirmation.
 """

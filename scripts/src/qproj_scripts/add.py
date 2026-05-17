@@ -1,7 +1,6 @@
 """Create a new git worktree branched off ``origin/$DEFAULT_BRANCH``.
 
-This is the Python implementation of the ``just add`` recipe: it
-validates that the requested branch name uses one of the canonical
+Validates that the requested branch name uses one of the canonical
 prefixes (``fix/``, ``feat/``, ``doc/``, ``tests/``, ``release/``),
 fetches from the remote, then runs ``git worktree add`` with a fresh
 branch based on ``origin/<DEFAULT_BRANCH>``.
