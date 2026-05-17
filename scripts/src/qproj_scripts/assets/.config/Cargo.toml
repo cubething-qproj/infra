@@ -1,9 +1,6 @@
 [workspace]
 members = [
-  "quell/active",
-  "q_screens/active",
-  "q_term/active",
-  "q_test_harness/active",
+  "active",
 ]
 resolver = "3"
 
@@ -25,14 +22,7 @@ lto = true
 codegen-units = 1
 strip = true
 
-[patch."https://github.com/cubething-qproj/q_screens"]
-q_screens = { path = "q_screens/active" }
-
-[patch."https://github.com/cubething-qproj/q_test_harness"]
-q_test_harness = { path = "q_test_harness/active" }
-
-[patch."https://github.com/cubething-qproj/q_term"]
-q_term = { path = "q_term/active" }
+# PATCHES GO HERE
 
 [profile.dist]
 inherits = "release"

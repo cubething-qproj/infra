@@ -23,52 +23,11 @@ workspace config, Nix flake, CI, and dev tooling.
 
 ## Getting Started
 
-It is recommended to clone the project like this:
-
-```bash
-mkdir qproj
-cd qproj
-git clone --bare https://github.com/cubething-qproj/infra infra
-cd infra
-echo "gitdir .bare" > .git
-git worktree add main -b main main
-cd main
-./setup.sh
+```sh
+# Will sync to ~/repos/cubething-qproj.
+# Set BASE_DIR to change the base directory.
+uvx --refresh --from "git+https://github.com/cubething-qproj/infra.git@main#subdirectory=scripts" qproj-scripts sync
 ```
-
-This will create a bare-repo + siblings "metarepo" setup, like this:
-
-```
-.
-├── Cargo.lock -> infra/main/Cargo.lock
-├── Cargo.toml -> infra/main/Cargo.toml
-├── infra
-│   └── main
-├── justfile -> ./infra/main/justfile
-├── q_screens
-│   ├── active -> main
-│   └── main
-├── q_term
-│   ├── active -> main
-│   └── main
-├── q_test_harness
-│   ├── active -> main
-│   └── main
-├── quell
-│   ├── active -> main
-│   └── main
-└── target
-```
-
-This clones all sibling repos, sets up bare-repo + worktree layouts, and creates
-root-level symlinks for `Cargo.toml`, `Cargo.lock`, `.envrc`, and `justfile`.
-
-This project is designed so that you can have all the repositories checked out
-simultaneously, as work on one will likely affect work on another.
-
-## Workflow
-
-Open the qproj/ directory in your favorite text editor. The intended workflow is to use the justfile for builds and worktree modifications. The entire metarepo is set up as a Cargo workspace, with each repo working both standalone and as a part of the workspace setup.
 
 ## Compatibility
 

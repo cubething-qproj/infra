@@ -6,7 +6,7 @@
           "features": "all",
         },
         "check": {
-          "overrideCommand": ["infra/main/scripts/ra_check.py"],
+          "overrideCommand": ["just", "ra-check"],
           "features": "all",
           "workspace": false,
         },

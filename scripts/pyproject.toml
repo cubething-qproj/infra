@@ -50,13 +50,3 @@ ignore = [
 
 [tool.ruff.format]
 quote-style = "double"
-
-# ---------------------------------------------------------------------------
-# basedpyright
-# ---------------------------------------------------------------------------
-
-[tool.basedpyright]
-pythonVersion = "3.14"
-include = ["src"]
-typeCheckingMode = "standard"
-reportMissingTypeStubs = false

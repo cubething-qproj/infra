@@ -15,6 +15,7 @@ import typer
 
 from qproj_scripts import (
     _common,
+    add,
     bevy_lint,
     build,
     check,
@@ -24,6 +25,8 @@ from qproj_scripts import (
     deny,
     play,
     ra_check,
+    sync,
+    target,
     test,
 )
 
@@ -48,6 +51,13 @@ app.add_typer(
     name="ra-check",
     help="Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.",
 )
+app.add_typer(
+    sync.app,
+    name="sync",
+    help="Sync the local clone-tree of workflow consumer repos.",
+)
+app.add_typer(target.app, name="target", help="Repoint ./active at a worktree dir.")
+app.add_typer(add.app, name="add", help="Create a new worktree off origin/$DEFAULT_BRANCH.")
 
 
 @app.command(
