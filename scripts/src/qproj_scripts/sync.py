@@ -66,6 +66,37 @@ def write_file(path: Path, content: str, *, dry: bool) -> None:
     path.write_text(content)
 
 
+def _detect_gpu_suffix() -> str:
+    if Path("/proc/driver/nvidia/version").exists():
+        return "#nvidia"
+    for vendor in Path("/sys/class/drm").glob("card*/device/vendor"):
+        try:
+            if vendor.read_text().strip() == "0x10de":
+                return "#nvidia"
+        except OSError:
+            continue
+    return ""
+
+
+def envrc() -> str:
+    suffix = _detect_gpu_suffix()
+    if suffix:
+        log(f"detected NVIDIA GPU; .envrc will use flake variant '{suffix}'", "info")
+    else:
+        log("no NVIDIA GPU detected; .envrc will use default flake variant", "info")
+
+    return (
+        'export GH_TOKEN=$(gh auth token 2>/dev/null || echo "")\n'
+        "export NIXPKGS_ALLOW_UNFREE=1\n"
+        "export LOCAL=1\n"
+        "\n"
+        "# GPU-variant autodetected by sync. Override by editing the suffix\n"
+        "# (e.g. drop '#nvidia' for the default shell, or change to a\n"
+        "# different variant). Re-running sync will re-detect and overwrite.\n"
+        f"use flake --impure path:infra/$(readlink infra/active){suffix}\n"
+    )
+
+
 def _symlink(target: Path, link: Path, *, dry: bool) -> None:
     level = "dry" if dry else "info"
     log(f"symlink {link} -> {target}", level=level)
@@ -177,6 +208,10 @@ def main(
         log(f"cp -r {src} -> {config_dir}", level)
         if not dry:
             shutil.copytree(src, config_dir)
+
+    log("writing .envrc", "info")
+    envrc_content = envrc()
+    write_file(org_dir / ".envrc", envrc_content, dry=dry)
 
     for repo in all_repos:
         _sync_repo(repo, base_dir, config_dir, dry=dry, clobber=clobber)
