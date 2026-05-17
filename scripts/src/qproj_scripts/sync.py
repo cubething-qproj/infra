@@ -22,11 +22,6 @@ from typing import Literal
 
 import typer
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
-
 DEFAULT_BRANCH = "main"
 
 
@@ -178,7 +173,6 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
         _symlink(config_dir / asset_.name, repo_dir / asset_.name, dry=dry)
 
 
-@app.callback(invoke_without_command=True)
 def main(
     execute: bool = typer.Option(
         False, "-x", "--execute", help="Actually run mutating commands (default is dry-run)."

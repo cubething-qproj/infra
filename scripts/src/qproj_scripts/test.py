@@ -10,17 +10,7 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={
-        "allow_extra_args": True,
-        "ignore_unknown_options": True,
-        "help_option_names": ["-h", "--help"],
-    },
-)
 
-
-@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Run ``cargo nextest`` with the workspace nextest config."""
     base = ["cargo", "nextest"]

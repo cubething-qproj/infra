@@ -1,7 +1,6 @@
 """Create a new git worktree branched off ``origin/$DEFAULT_BRANCH``.
 
-This is the Python implementation of the ``just add`` recipe: it
-validates that the requested branch name uses one of the canonical
+Validates that the requested branch name uses one of the canonical
 prefixes (``fix/``, ``feat/``, ``doc/``, ``tests/``, ``release/``),
 fetches from the remote, then runs ``git worktree add`` with a fresh
 branch based on ``origin/<DEFAULT_BRANCH>``.
@@ -16,15 +15,9 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
-
 _VALID_PREFIX = re.compile(r"^(fix|feat|doc|tests|release)/")
 
 
-@app.callback(invoke_without_command=True)
 def main(
     name: str = typer.Argument(..., help="Branch/worktree name, e.g. feat/foo."),
 ) -> None:

@@ -13,15 +13,6 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={
-        "allow_extra_args": True,
-        "ignore_unknown_options": True,
-        "help_option_names": ["-h", "--help"],
-    },
-)
-
 
 def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
     """Return the ``(argv, env_overrides)`` for the standard ``bevy lint`` invocation.
@@ -45,7 +36,6 @@ def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
     return argv, env
 
 
-@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Run ``bevy lint --all-features --target-dir=target/bevy_lint``."""
     argv, env = cmd(ctx.args)

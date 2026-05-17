@@ -1,9 +1,16 @@
 """Unified CLI frontend for the qproj_scripts verb modules.
 
-Each verb is a ``typer.Typer`` sub-app defined in its own module
+Each verb is a plain ``main`` function defined in its own module
 (:mod:`qproj_scripts.build`, :mod:`qproj_scripts.play`, ...). This module
-mounts them under their CLI names and exposes the resulting top-level
-``app`` as the ``qproj-scripts`` console script entry point.
+registers each as a top-level Typer command on the shared :data:`app`,
+which is the ``qproj-scripts`` console script entry point.
+
+Verbs are registered with ``@app.command`` (not ``add_typer``) on purpose:
+sub-Typers become Click *groups*, and Click parses any leading ``-x`` on
+a group as an attempted subcommand name. Registering as a command makes
+each verb a Click *leaf*, where ``allow_extra_args`` /
+``ignore_unknown_options`` actually take effect and pass-through args
+like ``qproj-scripts build -F dylib`` reach ``cargo`` intact.
 
 The only verb defined directly in this module is ``fix``, a thin alias
 for ``clippy --fix`` that reuses :func:`qproj_scripts.clippy.cmd`.
@@ -30,43 +37,59 @@ from qproj_scripts import (
     test,
 )
 
+# Verbs that forward all extra args/options to an underlying tool (cargo,
+# bevy, act, ...). They must tolerate unknown options so that flags like
+# `-F dylib` or `--release` pass through instead of being parsed as
+# qproj-scripts options.
+_PASSTHROUGH = {
+    "allow_extra_args": True,
+    "ignore_unknown_options": True,
+    "help_option_names": ["-h", "--help"],
+}
+
+# Verbs with a fixed, fully-declared option/argument surface.
+_STRICT = {"help_option_names": ["-h", "--help"]}
+
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings=_STRICT,
     help="Unified CLI for the cubething-qproj infra task scripts.",
 )
 
-app.add_typer(build.app, name="build", help="Build the workspace.")
-app.add_typer(play.app, name="play", help="Build and run a quell binary.")
-app.add_typer(check.app, name="check", help="Run Clippy and bevy_lint concurrently.")
-app.add_typer(clippy.app, name="clippy", help="Run Clippy.")
-app.add_typer(bevy_lint.app, name="bevy-lint", help="Run bevy_lint.")
-app.add_typer(deny.app, name="deny", help="Audit dependencies via cargo deny.")
-app.add_typer(test.app, name="test", help="Run the workspace test suite via nextest.")
-app.add_typer(coverage.app, name="coverage", help="Generate a coverage report.")
-app.add_typer(ci.app, name="ci", help="Run GitHub Actions workflows locally via act.")
-app.add_typer(
-    ra_check.app,
-    name="ra-check",
+
+def _register(name: str, fn, *, ctx, help: str) -> None:
+    app.command(name=name, context_settings=ctx, help=help)(fn)
+
+
+_register("build", build.main, ctx=_PASSTHROUGH, help="Build the workspace.")
+_register("play", play.main, ctx=_PASSTHROUGH, help="Build and run a quell binary.")
+_register("check", check.main, ctx=_STRICT, help="Run Clippy and bevy_lint concurrently.")
+_register("clippy", clippy.main, ctx=_PASSTHROUGH, help="Run Clippy.")
+_register("bevy-lint", bevy_lint.main, ctx=_PASSTHROUGH, help="Run bevy_lint.")
+_register("deny", deny.main, ctx=_STRICT, help="Audit dependencies via cargo deny.")
+_register("test", test.main, ctx=_PASSTHROUGH, help="Run the workspace test suite via nextest.")
+_register("coverage", coverage.main, ctx=_PASSTHROUGH, help="Generate a coverage report.")
+_register("ci", ci.main, ctx=_PASSTHROUGH, help="Run GitHub Actions workflows locally via act.")
+_register(
+    "ra-check",
+    ra_check.main,
+    ctx=_PASSTHROUGH,
     help="Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.",
 )
-app.add_typer(
-    sync.app,
-    name="sync",
+_register(
+    "sync",
+    sync.main,
+    ctx=_STRICT,
     help="Sync the local clone-tree of workflow consumer repos.",
 )
-app.add_typer(target.app, name="target", help="Repoint ./active at a worktree dir.")
-app.add_typer(add.app, name="add", help="Create a new worktree off origin/$DEFAULT_BRANCH.")
+_register("target", target.main, ctx=_STRICT, help="Repoint ./active at a worktree dir.")
+_register("add", add.main, ctx=_STRICT, help="Create a new worktree off origin/$DEFAULT_BRANCH.")
 
 
 @app.command(
     name="fix",
-    context_settings={
-        "allow_extra_args": True,
-        "ignore_unknown_options": True,
-        "help_option_names": ["-h", "--help"],
-    },
+    context_settings=_PASSTHROUGH,
     help="Run Clippy with --fix to apply autofixable suggestions.",
 )
 def fix(ctx: typer.Context) -> None:

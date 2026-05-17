@@ -1,7 +1,6 @@
 """Repoint the ``active`` symlink at a sibling worktree directory.
 
-This is the Python implementation of the ``just target`` recipe: it
-replaces ``./active`` with a symlink to ``<dir>`` (or ``$DEFAULT_BRANCH``
+Replaces ``./active`` with a symlink to ``<dir>`` (or ``$DEFAULT_BRANCH``
 when ``dir`` is the literal string ``default``), then prints the
 resulting symlink for confirmation.
 """
@@ -15,13 +14,7 @@ import typer
 
 from qproj_scripts import _common
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
 
-
-@app.callback(invoke_without_command=True)
 def main(
     dir_: str = typer.Argument(..., metavar="DIR", help="Worktree dir, or 'default'."),
 ) -> None:

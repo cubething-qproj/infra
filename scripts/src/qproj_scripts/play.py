@@ -23,17 +23,7 @@ from pathlib import Path
 
 import typer
 
-from qproj_scripts import _common
-
-app = typer.Typer(
-    add_completion=False,
-    context_settings={
-        "allow_extra_args": True,
-        "ignore_unknown_options": True,
-        "help_option_names": ["-h", "--help"],
-    },
-)
-
+from qproj_scripts import _common, build
 
 # ---------------------------------------------------------------------------
 # Asset path resolution (metarepo vs standalone layout)
@@ -44,9 +34,7 @@ def _default_assets() -> Path:
     """Pick the right ``assets/`` dir for metarepo vs standalone checkouts.
 
     In metarepo mode, follow the ``quell/active`` symlink so the assets
-    tracked match the source tree the workspace is currently building
-    against (i.e. switching worktrees with ``just ws wt switch quell ...``
-    repoints both code and assets in lockstep).
+    match the source tree the workspace is currently building against.
     """
     infra_main = _common.infra_main_dir()
     metarepo_root = infra_main.parent.parent
@@ -185,7 +173,7 @@ def _resolve_nixgl(override: str | None) -> str:
             file=sys.stderr,
         )
         print(
-            "    nix develop --impure ./infra/main#nvidia -c just play ...",
+            "    nix develop --impure ./infra/main#nvidia -c qproj-scripts play ...",
             file=sys.stderr,
         )
     elif name == "nixVulkanNvidia":
@@ -218,13 +206,12 @@ def _resolve_nixgl(override: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-@app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     example: str | None = typer.Option(None, "-x", "--example", help="Cargo --example name."),
     package: str | None = typer.Option(None, "-p", "--package", help="Cargo -p package."),
     build_args: str = typer.Option(
-        "-F dylib", "-B", "--build-args", help="Extra args forwarded to `just build`."
+        "-F dylib", "-B", "--build-args", help="Extra args forwarded to cargo build."
     ),
     env_vars: str = typer.Option(
         "", "-e", "--env", help="Env-var string forwarded to psync (remote mode only)."
@@ -264,15 +251,10 @@ def main(
         if not file_set:
             file_path = Path(f"target/debug/{package}")
 
-    # Build via `just build`.
-    build_cmd = [
-        "just",
-        "build",
-        *shlex.split(build_args),
-        *cargo_package,
-        *cargo_example,
-    ]
-    _common.run(build_cmd)
+    # Build via the sibling build verb (in-process).
+    build_extra = [*shlex.split(build_args), *cargo_package, *cargo_example]
+    build_argv, build_env = build.cmd(build_extra)
+    _common.run(build_argv, env_overrides=build_env)
 
     target_path = Path(f"./target/debug/examples/{example}") if example else file_path
 

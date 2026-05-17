@@ -16,17 +16,7 @@ import subprocess
 
 import typer
 
-app = typer.Typer(
-    add_completion=False,
-    context_settings={
-        "allow_extra_args": True,
-        "ignore_unknown_options": True,
-        "help_option_names": ["-h", "--help"],
-    },
-)
 
-
-@app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Run Clippy then bevy_lint, both with JSON-rendered-ANSI diagnostics."""
     extra = list(ctx.args)
