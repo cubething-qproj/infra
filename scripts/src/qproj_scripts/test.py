@@ -23,7 +23,7 @@ app = typer.Typer(
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Run ``cargo nextest`` with the workspace nextest config."""
-    base = ["cargo", "nextest", "--config-file=./.config/nextest.toml"]
+    base = ["cargo", "nextest"]
     cmd = base + (ctx.args if ctx.args else ["r", "--workspace"])
     result = _common.run(cmd, check=False, env_overrides={"RUSTC_WRAPPER": "sccache"})
     raise typer.Exit(result.returncode)
