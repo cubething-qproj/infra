@@ -16,15 +16,13 @@
     # bevy_lint_driver). Consuming it directly removes the need to vendor
     # the bevy_cli source and rebuild bevy_lint from scratch via crane.
     bevy_cli.url = "github:TheBevyFlock/bevy_cli";
-    # nixGL: wraps binaries so Nix-linked Vulkan/GL apps can find host
-    # GPU drivers on non-NixOS hosts. Required because Nix's glibc loader
-    # ignores /etc/ld.so.cache, so system ICDs' bare-name dlopen() fails.
-    nixgl = {
-      url = "github:nix-community/nixGL";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-    };
   };
+
+  # GPU driver wrapping (formerly via nixGL inputs + a dedicated `nvidia`
+  # devshell) is now handled ad-hoc in the `play` justfile recipe via
+  # `nix run github:nix-community/nixGL#nixVulkan<Vendor>`. That keeps the
+  # devshell pure (no `--impure`) and avoids paying nixGL's closure cost on
+  # every shell entry -- you only pay it when you actually launch a binary.
 
   outputs = {
     self,
@@ -32,7 +30,6 @@
     flake-utils,
     rust-overlay,
     bevy_cli,
-    nixgl,
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
@@ -68,19 +65,6 @@
           libxkbcommon
           vulkan-loader
         ]);
-
-        # Mesa wrapper covers AMD, Intel, and Nouveau (purely buildable).
-        # nixGLNvidia uses builtins.exec to read the host driver version and
-        # therefore requires `nix develop --impure` (plus
-        # allow-unsafe-native-code-during-evaluation). It is offered via a
-        # separate `nvidia` devshell so mesa users don't pay that cost.
-        nixglPkgs = pkgs.lib.optionals pkgs.stdenv.isLinux [
-          nixgl.packages.${system}.nixVulkanIntel
-        ];
-
-        nixglNvidiaPkgs = pkgs.lib.optionals pkgs.stdenv.isLinux [
-          nixgl.packages.${system}.nixVulkanNvidia
-        ];
 
         mkShell = extraPackages:
           pkgs.mkShell {
@@ -126,15 +110,10 @@
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath linuxDeps;
           };
       in {
-        devShells.default = mkShell nixglPkgs;
-        # CI variant: identical to `default` but without nixGL. Headless
-        # GitHub runners never need host-GPU driver wrappers, and nixGL
-        # pulls a non-trivial closure (Vulkan loader, ICDs, GL libs).
-        # Consumed by downstream CI via `nix develop .#ci`.
+        devShells.default = mkShell [];
+        # CI alias retained for downstream `.#ci` consumers; identical to
+        # `default` now that nixGL is no longer in the shell.
         devShells.ci = mkShell [];
-        # Use with: `nix develop --impure .#nvidia` (or in .envrc:
-        # `use flake --impure .#nvidia`).
-        devShells.nvidia = mkShell nixglNvidiaPkgs;
       }
     );
 }
