@@ -2,8 +2,9 @@
 
 Local mode (no ``$SSH_CLIENT``):
   Re-adds ``target/debug/deps`` to ``LD_LIBRARY_PATH`` so dylib-feature builds
-  resolve ``libbevy_dylib-<hash>.so`` under nix-shell, and routes through a
-  nixGL wrapper when it can detect (or be told) the right one.
+  resolve ``libbevy_dylib-<hash>.so`` under nix-shell, then exec's the binary.
+  GPU driver wrapping (nixGL) is the caller's responsibility -- the `play`
+  recipe in the shared justfile prepends a `nix run ...#nixVulkan<Vendor>`.
 
 Remote mode (``$SSH_CLIENT`` set):
   patchelf-rewrites the binary so it loads through the host's standard
@@ -16,9 +17,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import typer
@@ -98,110 +97,6 @@ def _patch_elf_for_psync(target: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# nixGL detection (local mode)
-# ---------------------------------------------------------------------------
-
-
-def _autodetect_nixgl() -> str:
-    """Pick a nixVulkan* wrapper based on the host GPU vendor."""
-    if Path("/proc/driver/nvidia/version").exists():
-        return "nixVulkanNvidia"
-    pick = ""
-    for vendor_file in Path("/sys/class/drm").glob("card*/device/vendor"):
-        try:
-            vid = vendor_file.read_text().strip()
-        except OSError:
-            continue
-        # 0x10de = NVIDIA, 0x1002 = AMD, 0x8086 = Intel.
-        if vid == "0x10de":
-            return "nixVulkanNvidia"
-        if vid in ("0x1002", "0x8086"):
-            pick = "nixVulkanIntel"
-    return pick
-
-
-def _resolve_nixgl_with_suffix(name: str) -> str:
-    """nixGL ships versioned wrappers (e.g. ``nixGLNvidia-580.159.03``).
-
-    If the bare name isn't on PATH, scan PATH for any ``<name>-*`` and use it.
-    """
-    for d in os.environ.get("PATH", "").split(os.pathsep):
-        if not d:
-            continue
-        try:
-            for entry in Path(d).iterdir():
-                if entry.name.startswith(f"{name}-") and os.access(entry, os.X_OK):
-                    return entry.name
-        except FileNotFoundError, NotADirectoryError, PermissionError:
-            continue
-    return ""
-
-
-def _resolve_nixgl(override: str | None) -> str:
-    """Return the nixGL wrapper to prepend to the run command, or "" for none.
-
-    Precedence: ``-G`` flag > ``$NIXGL`` > GPU autodetect. ``$NO_NIXGL=1``
-    short-circuits everything to "".
-    """
-    if os.environ.get("NO_NIXGL"):
-        return ""
-    name = override or os.environ.get("NIXGL") or _autodetect_nixgl()
-    if not name:
-        return ""
-    if shutil.which(name):
-        return name
-    resolved = _resolve_nixgl_with_suffix(name)
-    if resolved:
-        return resolved
-
-    in_nix_shell = os.environ.get("IN_NIX_SHELL", "")
-    print(
-        f"play.py: detected GPU wants '{name}' but it isn't on PATH.",
-        file=sys.stderr,
-    )
-    if not in_nix_shell:
-        print(
-            "  IN_NIX_SHELL is unset -- you are not inside a nix devshell.",
-            file=sys.stderr,
-        )
-        print(
-            "  direnv likely hasn't fired in this shell. Try `direnv reload`,",
-            file=sys.stderr,
-        )
-        print(
-            "  open a fresh terminal in the project root, or run via:",
-            file=sys.stderr,
-        )
-        print(
-            "    nix develop --impure ./infra/main#nvidia -c qproj-scripts play ...",
-            file=sys.stderr,
-        )
-    elif name == "nixVulkanNvidia":
-        print(
-            "  Enter the NVIDIA devshell: nix develop --impure ./infra/main#nvidia",
-            file=sys.stderr,
-        )
-        print(
-            "  Or in .envrc:               use flake --impure ./infra/main#nvidia",
-            file=sys.stderr,
-        )
-    elif name == "nixVulkanIntel":
-        print(
-            "  Enter the default devshell: nix develop --impure ./infra/main",
-            file=sys.stderr,
-        )
-    print(
-        "  Override with -G <wrapper> or NIXGL=<wrapper>; disable with NO_NIXGL=1.",
-        file=sys.stderr,
-    )
-    print(
-        "play.py: refusing to launch -- the binary would panic at vkCreateInstance.",
-        file=sys.stderr,
-    )
-    raise typer.Exit(code=1)
-
-
-# ---------------------------------------------------------------------------
 # Main command
 # ---------------------------------------------------------------------------
 
@@ -224,12 +119,6 @@ def main(
         "-A",
         "--assets",
         help="Override the assets directory (default: autodetected).",
-    ),
-    nixgl_override: str | None = typer.Option(
-        None,
-        "-G",
-        "--nixgl",
-        help="Force a specific nixGL wrapper (e.g. nixVulkanNvidia).",
     ),
 ) -> None:
     """Build, then exec/relay the binary locally or to the psync host."""
@@ -282,13 +171,7 @@ def main(
     existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
     run_ld_path = f"{deps_dir}{':' + existing_ld if existing_ld else ''}"
 
-    nixgl_cmd = _resolve_nixgl(nixgl_override)
-
-    final = []
-    if nixgl_cmd:
-        final.append(nixgl_cmd)
-    final.append(str(target_path))
-    final.extend(shlex.split(cmd_args))
+    final = [str(target_path), *shlex.split(cmd_args)]
 
     _common.log(" ".join(final))
     os.environ["LD_LIBRARY_PATH"] = run_ld_path

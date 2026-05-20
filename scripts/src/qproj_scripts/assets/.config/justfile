@@ -7,6 +7,11 @@ QPROJ_GIT_URL := "git+https://github.com/cubething-qproj/infra.git@" + QPROJ_REF
 SCRIPTS_SRC := env("QPROJ_SCRIPTS_SRC", QPROJ_GIT_URL)
 qproj := "uvx --refresh --from " + quote(SCRIPTS_SRC) + " qproj-scripts"
 
+# nixGL wrapper attribute used by `play`. Override per host in .env.local
+# (e.g. `export NIXGL=nixVulkanIntel`). The flake itself no longer ships
+# nixGL -- we pull it ad-hoc via `nix run` so the devshell stays pure.
+NIXGL := env("NIXGL", "nixVulkanNvidia")
+
 _default:
     just --list
 
@@ -16,7 +21,8 @@ build *args:
 
 # Run the application.
 play *args:
-    {{ qproj }} play {{ args }}
+    nix run --impure github:nix-community/nixGL#{{ NIXGL }} -- \
+        {{ qproj }} play {{ args }}
 
 # Lint with Clippy and bevy_lint.
 check *args:

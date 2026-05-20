@@ -29,34 +29,17 @@ def write_file(path: Path, content: str, *, dry: bool) -> None:
     path.write_text(content)
 
 
-def _detect_gpu_suffix() -> str:
-    if Path("/proc/driver/nvidia/version").exists():
-        return "#nvidia"
-    for vendor in Path("/sys/class/drm").glob("card*/device/vendor"):
-        try:
-            if vendor.read_text().strip() == "0x10de":
-                return "#nvidia"
-        except OSError:
-            continue
-    return ""
-
-
 def envrc() -> str:
-    suffix = _detect_gpu_suffix()
-    if suffix:
-        log(f"detected NVIDIA GPU; .envrc will use flake variant '{suffix}'", "info")
-    else:
-        log("no NVIDIA GPU detected; .envrc will use default flake variant", "info")
-
+    # GPU driver wrapping is handled per-invocation by `just play`
+    # (which prepends `nix run github:nix-community/nixGL#$NIXGL`), so
+    # the devshell itself is pure -- no `--impure`, no per-GPU variant.
+    # Override the wrapper for a host by exporting `NIXGL` in .env.local.
     return (
         'export GH_TOKEN=$(gh auth token 2>/dev/null || echo "")\n'
         "export NIXPKGS_ALLOW_UNFREE=1\n"
         "export LOCAL=1\n"
         "\n"
-        "# GPU-variant autodetected by sync. Override by editing the suffix\n"
-        "# (e.g. drop '#nvidia' for the default shell, or change to a\n"
-        "# different variant). Re-running sync will re-detect and overwrite.\n"
-        f"use flake --impure path:infra/$(readlink infra/active){suffix}\n"
+        "use flake path:infra/$(readlink infra/active)\n"
     )
 
 
