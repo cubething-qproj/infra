@@ -12,10 +12,7 @@ runs:
   using: composite
   steps:
     - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@main
-      with:
-        # Avoid Determinate's FlakeHub-injected nixpkgs-weekly registry.
-        determinate: false
+      uses: cachix/install-nix-action@v31
 
     - name: Cache Nix store
       uses: nix-community/cache-nix-action@v7
