@@ -32,6 +32,10 @@ env:
 jobs:
     build_and_test:
         runs-on: ubuntu-latest
+        permissions:
+            # Required for magic-nix-cache to authenticate to FlakeHub Cache.
+            id-token: write
+            contents: read
         strategy:
             matrix:
                 target: [x86_64-unknown-linux-gnu]
