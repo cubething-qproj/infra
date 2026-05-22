@@ -22,3 +22,43 @@ jobs:
     coverage:
         needs: ci
         uses: cubething-qproj/infra/.github/workflows/downstream-codecov.yml@main
+
+    auto-merge:
+        needs: [ci, coverage]
+        if: github.event_name == 'pull_request' && github.head_ref == 'automation/sync-infra'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - uses: actions/checkout@v6
+            - run: gh pr merge ${{ github.event.pull_request.number }} --merge --delete-branch
+              env:
+                  GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+
+    notify-failure:
+        needs: [ci, coverage]
+        if: failure() && github.event_name == 'pull_request' && github.head_ref == 'automation/sync-infra'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            issues: write
+        steps:
+            - uses: actions/checkout@v6
+            - name: Create or update failure issue
+              run: |
+                  TITLE="CI sync failure from infra"
+                  BODY="CI failed on automation/sync-infra PR #${{ github.event.pull_request.number }}.
+
+                  Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+                  Please investigate and fix manually."
+
+                  EXISTING=$(gh issue list --search "is:open in:title $TITLE" --json number,title -q '.[] | select(.title == "CI sync failure from infra") | .number' | head -1)
+                  if [ -n "$EXISTING" ]; then
+                    gh issue comment "$EXISTING" --body "$BODY"
+                  else
+                    gh issue create --title "$TITLE" --body "$BODY" --assignee ada-x64
+                  fi
+              env:
+                  GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
