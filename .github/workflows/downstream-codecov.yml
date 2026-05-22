@@ -24,7 +24,7 @@ jobs:
 
       - uses: nicknovitski/nix-develop@v1
         with:
-          arguments: .#ci
+          arguments: .#ci-coverage
 
       - name: Detect package name
         id: pkg

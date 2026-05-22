@@ -39,7 +39,15 @@
         # Keep in sync with bevy_cli's rust-toolchain.toml. The
         # upstream flake's `bevy_lint_driver` is built against this exact
         # nightly; running it under any other rustc ABI fails to load.
-        rustToolchain = pkgs.rust-bin.nightly."2026-03-05".default.override {
+        mkRustToolchain = {
+          extensions,
+          targets,
+        }:
+          pkgs.rust-bin.nightly."2026-03-05".default.override {
+            inherit extensions targets;
+          };
+
+        rustToolchain = mkRustToolchain {
           extensions = [
             "rustc-codegen-cranelift-preview"
             "rustc-dev"
@@ -50,6 +58,22 @@
           ];
           targets = [
             "x86_64-pc-windows-msvc"
+            "x86_64-unknown-linux-gnu"
+          ];
+        };
+
+        # Trimmed toolchain for CI. Drops IDE-only extensions
+        # (rust-analyzer, rust-src), the rustc-dev internals extension
+        # (only needed to compile rustc plugins ourselves; bevy_lint_driver
+        # ships prebuilt), and the windows cross-compile target.
+        # cranelift stays: .cargo/config.toml pins it as the dev codegen-backend.
+        rustToolchainCi = mkRustToolchain {
+          extensions = [
+            "rustc-codegen-cranelift-preview"
+            "llvm-tools-preview"
+            "clippy"
+          ];
+          targets = [
             "x86_64-unknown-linux-gnu"
           ];
         };
@@ -66,31 +90,21 @@
           vulkan-loader
         ]);
 
-        mkShell = extraPackages:
+        mkShell = {
+          toolchain ? rustToolchain,
+          extraPackages ? [],
+        }:
           pkgs.mkShell {
             nativeBuildInputs = [pkgs.pkg-config];
 
             buildInputs =
               linuxDeps
               ++ [
-                rustToolchain
+                toolchain
                 bevy-cli
               ];
 
-            packages =
-              (with pkgs; [
-                sccache
-                mold
-                patchelf
-                cargo-nextest
-                cargo-deny
-                cargo-llvm-cov
-                act
-                actionlint
-                just
-                uv
-              ])
-              ++ extraPackages;
+            packages = extraPackages;
 
             shellHook = ''
               export CARGO_TERM_COLOR="always"
@@ -109,11 +123,36 @@
 
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath linuxDeps;
           };
+
+        # Packages used by `qproj-scripts build|check|test`.
+        ciPackages = with pkgs; [
+          sccache
+          mold
+          cargo-nextest
+          uv
+        ];
+
+        # Full developer toolbox.
+        devPackages = with pkgs;
+          ciPackages
+          ++ [
+            patchelf
+            cargo-deny
+            cargo-llvm-cov
+            act
+            actionlint
+            just
+          ];
       in {
-        devShells.default = mkShell [];
-        # CI alias retained for downstream `.#ci` consumers; identical to
-        # `default` now that nixGL is no longer in the shell.
-        devShells.ci = mkShell [];
+        devShells.default = mkShell {extraPackages = devPackages;};
+        devShells.ci = mkShell {
+          toolchain = rustToolchainCi;
+          extraPackages = ciPackages;
+        };
+        devShells.ci-coverage = mkShell {
+          toolchain = rustToolchainCi;
+          extraPackages = ciPackages ++ [pkgs.cargo-llvm-cov];
+        };
       }
     );
 }
