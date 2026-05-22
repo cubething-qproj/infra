@@ -14,6 +14,9 @@ runs:
   steps:
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@main
+      with:
+        # Avoid Determinate's FlakeHub-injected nixpkgs-weekly registry.
+        determinate: false
 
     - name: Cache Nix store
       uses: DeterminateSystems/magic-nix-cache-action@main
