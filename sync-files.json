@@ -1,8 +1,8 @@
 [
-  { "src": ".github/templates/ci.yml", "dst": ".github/workflows/ci.yml" },
-  { "src": ".github/templates/flake.nix", "dst": "flake.nix" },
-  { "src": "config/deny.toml", "dst": "deny.toml" },
-  { "src": "config/nextest.toml", "dst": "nextest.toml" },
-  { "src": "config/config.toml", "dst": ".cargo/config.toml" },
-  { "src": "config/worktree-justfile", "dst": "justfile" }
+    { "src": ".github/templates/ci.yml", "dst": ".github/workflows/ci.yml" },
+    { "src": ".github/templates/flake.nix", "dst": "flake.nix" },
+    { "src": "config/deny.toml", "dst": "deny.toml" },
+    { "src": "config/nextest.toml", "dst": "nextest.toml" },
+    { "src": "config/config.toml", "dst": ".cargo/config.toml" },
+    { "src": "config/worktree.justfile", "dst": "justfile" }
 ]

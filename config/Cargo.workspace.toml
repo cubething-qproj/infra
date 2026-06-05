@@ -1,6 +1,6 @@
 [workspace]
 members = [
-  "active",
+  "crates/*",
 ]
 resolver = "3"
 
@@ -21,8 +21,6 @@ opt-level = "s"
 lto = true
 codegen-units = 1
 strip = true
-
-# PATCHES GO HERE
 
 [profile.dist]
 inherits = "release"
