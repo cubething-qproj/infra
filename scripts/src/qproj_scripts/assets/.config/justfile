@@ -26,14 +26,14 @@ sync *args:
 sync-scripts:
     uv tool install qproj-scripts --from {{ SCRIPTS_SRC }}
 
-# Change where 'active' points to.
-target dir:
-    {{ qproj }} target {{ dir }}
+# Check out a branch in active/.
+target *args:
+    {{ qproj }} target {{ args }}
 
 # Create a new worktree.
-add name:
-    {{ qproj }} add {{ name }}
+add *args:
+    {{ qproj }} add {{ args }}
 
 # Prune merged branches.
-prune:
-    {{ qproj }} prune
+prune *args:
+    {{ qproj }} prune {{ args }}

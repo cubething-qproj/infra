@@ -26,6 +26,11 @@ def main(
         "--target",
         help="After creating the worktree, also check out NAME in active/.",
     ),
+    clobber: bool = typer.Option(
+        False,
+        "--clobber",
+        help="With -t, force the active/ checkout even if it has uncommitted changes.",
+    ),
 ) -> None:
     """Create a worktree on a new branch ``NAME``
     off ``$DEFAULT_ORIGIN/$DEFAULT_BRANCH`` (origin/main)."""
@@ -48,4 +53,4 @@ def main(
     )
 
     if target:
-        target_mod.retarget(name)
+        target_mod.retarget(name, clobber=clobber)

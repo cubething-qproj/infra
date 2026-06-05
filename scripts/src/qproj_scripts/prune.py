@@ -12,7 +12,6 @@ from shutil import rmtree
 import typer
 
 from qproj_scripts._common import DEFAULT_BRANCH, DEFAULT_REMOTE, VALID_PREFIX, log, run
-from qproj_scripts.target import retarget
 
 
 def main(
@@ -34,7 +33,12 @@ def main(
     if ff is not None and ff.returncode != 0:
         log("Failed to pull default branch.", level="error")
         raise typer.Exit(code=1)
-    retarget("default")
+    # Note: previously this called `retarget("default")` to swing the
+    # `active` symlink back to main before walking branch worktrees.
+    # Post-Step-4 `active/` is an independent worktree (not a symlink),
+    # the per-branch worktrees are reached directly below, and clobbering
+    # `active/` here would surprise anyone running `just prune` with
+    # uncommitted work in flight. Drop the call.
 
     for dir in [dir for dir in Path.cwd().iterdir() if dir.name in VALID_PREFIX]:
         for branch_path in [branch for branch in dir.iterdir() if branch.is_dir()]:
