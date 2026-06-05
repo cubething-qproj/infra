@@ -128,6 +128,7 @@
         ciPackages = with pkgs; [
           sccache
           mold
+          clang
           cargo-nextest
           uv
         ];
