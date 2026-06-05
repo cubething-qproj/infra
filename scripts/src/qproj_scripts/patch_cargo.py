@@ -48,6 +48,28 @@ def _is_table(value: Any) -> bool:
     return isinstance(value, (Table, Container))
 
 
+def _satisfies(target: dict[str, Any], template: dict[str, Any]) -> bool:
+    """True iff every key path in ``template`` exists in ``target`` with equal value.
+
+    Both arguments are plain Python dicts (post-``tomlkit`` unwrap).
+    Used to short-circuit writes when the target already satisfies
+    the template, side-stepping tomlkit's habit of re-rendering
+    dotted keys (``a.b.c = 1`` vs ``[a.b]\nc = 1``) on every
+    round-trip -- the semantic content is identical but the bytes
+    differ, which would otherwise break by-construction idempotence.
+    """
+    for key, tpl_val in template.items():
+        if key not in target:
+            return False
+        tgt_val = target[key]
+        if isinstance(tpl_val, dict) and isinstance(tgt_val, dict):
+            if not _satisfies(tgt_val, tpl_val):
+                return False
+        elif tgt_val != tpl_val:
+            return False
+    return True
+
+
 def _deep_merge(target: Any, template: Any) -> None:
     """Recursively ensure every key in ``template`` is set in ``target``."""
     for key, tpl_value in template.items():
@@ -61,10 +83,16 @@ def patch(target_text: str, template_text: str) -> str:
     """Return ``target_text`` deep-merged with ``template_text``.
 
     Pure function; performs no I/O. Round-trips through ``tomlkit`` so
-    untouched tables retain their original formatting.
+    untouched tables retain their original formatting. If the target
+    already satisfies the template (every template key path present
+    with equal value), the input string is returned unchanged --
+    guaranteeing byte-level idempotence regardless of how tomlkit
+    chooses to re-render dotted keys.
     """
     target = tomlkit.parse(target_text)
     template = tomlkit.parse(template_text)
+    if _satisfies(target.unwrap(), template.unwrap()):
+        return target_text
     _deep_merge(target, template)
     return tomlkit.dumps(target)
 
