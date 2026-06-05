@@ -30,6 +30,7 @@ from qproj_scripts import (
     clippy,
     coverage,
     deny,
+    patch_cargo,
     play,
     prune,
     ra_check,
@@ -87,6 +88,12 @@ _register(
 _register("target", target.main, ctx=_STRICT, help="Repoint ./active at a worktree dir.")
 _register("add", add.main, ctx=_STRICT, help="Create a new worktree off origin/$DEFAULT_BRANCH.")
 _register("prune", prune.main, ctx=_STRICT, help="Clean up all already-merged worktrees.")
+_register(
+    "patch-cargo",
+    patch_cargo.main,
+    ctx=_STRICT,
+    help="Patch a downstream Cargo.toml with the shared workspace template.",
+)
 
 
 @app.command(
