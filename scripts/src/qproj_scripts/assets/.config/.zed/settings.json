@@ -1,26 +1,26 @@
 {
+  "file_scan_exclusions": [
+    "**/.bare",
+    "**/.direnv",
+    "**/target",
+    "main",
+    "feat",
+    "fix",
+    "doc",
+    "tests",
+    "release"
+  ],
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {
-        "cargo": {
-          "features": "all",
-        },
+        "linkedProjects": ["./active/Cargo.toml"],
+        "cargo": { "features": "all" },
         "check": {
           "overrideCommand": ["just", "ra-check"],
           "features": "all",
-          "workspace": false,
-        },
-      },
-    },
-    "basedpyright": {
-      "settings": {
-        "logLevel": "Warn",
-      },
-    },
-  },
-  "languages": {
-    "Python": {
-      "language_servers": ["ruff", "basedpyright"],
-    },
-  },
+          "workspace": false
+        }
+      }
+    }
+  }
 }

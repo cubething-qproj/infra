@@ -39,7 +39,7 @@ def envrc() -> str:
         "export NIXPKGS_ALLOW_UNFREE=1\n"
         "export LOCAL=1\n"
         "\n"
-        "use flake path:infra/$(readlink infra/active)\n"
+        "use flake path:infra/active\n"
     )
 
 
@@ -52,7 +52,57 @@ def _symlink(target: Path, link: Path, *, dry: bool) -> None:
         link.unlink()
     elif link.is_dir():
         shutil.rmtree(link)
+    link.parent.mkdir(parents=True, exist_ok=True)
     link.symlink_to(target)
+
+
+# Top-level paths inside <repo>/ owned by per-worktree sync rather than
+# by the shared .config/ overlay. Any symlink at these paths would
+# shadow the real per-worktree file inside active/, so we unlink them
+# defensively on every sync.
+_STALE_REPO_ROOT_LINKS = ("Cargo.toml", ".cargo", "nextest.toml")
+
+
+def _prune_stale(repo_dir: Path, *, dry: bool) -> None:
+    """Drop layout artifacts that conflict with the canonical layout.
+
+    ``<repo>/active`` must be a real worktree, not a symlink:
+    ``Path.is_dir()`` follows symlinks, so a stale symlink here would
+    hide a missing worktree and skip its creation.
+    """
+    level = "dry" if dry else "info"
+    active = repo_dir / "active"
+    if active.is_symlink():
+        log(f"removing stale symlink {active}", level=level)
+        if not dry:
+            active.unlink()
+
+    for name in _STALE_REPO_ROOT_LINKS:
+        stale = repo_dir / name
+        if stale.is_symlink():
+            log(f"removing stale symlink {stale}", level=level)
+            if not dry:
+                stale.unlink()
+
+
+def _sync_config_links(repo_dir: Path, config_dir: Path, *, dry: bool) -> None:
+    """Symlink the shared .config/ overlay into ``repo_dir``.
+
+    Top-level entries are linked directly. ``.zed/`` is special-cased
+    so per-repo Zed tweaks can coexist with the shared settings.json:
+    a real ``<repo>/.zed/`` dir is created and each child file is
+    symlinked individually rather than the whole directory.
+    """
+    for entry in asset(".config").iterdir():
+        name = entry.name
+        if name == ".zed":
+            zed_dir = repo_dir / ".zed"
+            if not dry:
+                zed_dir.mkdir(parents=True, exist_ok=True)
+            for child in entry.iterdir():
+                _symlink(config_dir / ".zed" / child.name, zed_dir / child.name, dry=dry)
+        else:
+            _symlink(config_dir / name, repo_dir / name, dry=dry)
 
 
 def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobber: bool) -> None:
@@ -90,6 +140,8 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
     run(["git", "-C", str(bare), "config", "worktree.useRelativePaths", "true"], dry=dry)
     run(["git", "-C", str(bare), "worktree", "repair"], dry=dry)
 
+    _prune_stale(repo_dir, dry=dry)
+
     log(f"syncing {DEFAULT_BRANCH}", "info")
     wt = repo_dir / DEFAULT_BRANCH
     if not wt.is_dir():
@@ -97,6 +149,30 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
         run(["git", "-C", str(bare), "worktree", "add", str(wt), DEFAULT_BRANCH], dry=dry)
     else:
         log(f"{wt} exists", "info")
+
+    log("syncing active worktree", "info")
+    active = repo_dir / "active"
+    if not active.is_dir():
+        log(f"{active} missing", "info")
+        # Detached HEAD at main's tip: the main/ worktree already holds
+        # the `main` branch ref, and git refuses to check out the same
+        # branch in two worktrees. `qproj target <branch>` is the
+        # supported way to put active/ onto an actual branch.
+        run(
+            [
+                "git",
+                "-C",
+                str(bare),
+                "worktree",
+                "add",
+                "--detach",
+                str(active),
+                DEFAULT_BRANCH,
+            ],
+            dry=dry,
+        )
+    else:
+        log(f"{active} exists", "info")
 
     status = ""
     if not dry:
@@ -120,8 +196,7 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
     run(["git", "-C", str(wt), "clean", "-fd"], dry=dry)
 
     log("Symlinking config files", "info")
-    for asset_ in asset(".config").iterdir():
-        _symlink(config_dir / asset_.name, repo_dir / asset_.name, dry=dry)
+    _sync_config_links(repo_dir, config_dir, dry=dry)
 
 
 def main(

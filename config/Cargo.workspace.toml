@@ -1,7 +1,4 @@
 [workspace]
-members = [
-  "active",
-]
 resolver = "3"
 
 [workspace.lints]
@@ -21,8 +18,6 @@ opt-level = "s"
 lto = true
 codegen-units = 1
 strip = true
-
-# PATCHES GO HERE
 
 [profile.dist]
 inherits = "release"

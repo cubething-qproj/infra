@@ -35,6 +35,9 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@main
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
       - name: Sync files
         run: |
           cd downstream
@@ -47,6 +50,15 @@ jobs:
             mkdir -p "$(dirname "$dst")"
             cp "../infra/$src" "$dst"
           done
+
+          # Merge shared workspace/profile/lints blocks into the
+          # downstream Cargo.toml, preserving its own [package],
+          # [dependencies], [features], [[bin]], etc.
+          if [ -f Cargo.toml ]; then
+            uvx --from ../infra/scripts qproj-scripts patch-cargo \
+              Cargo.toml \
+              --template ../infra/config/Cargo.workspace.toml
+          fi
 
           # Stage copied files so Nix can see them in the git repo
           git add -A
