@@ -1,90 +1,71 @@
-"""Patch a downstream ``Cargo.toml`` with the shared workspace template.
+"""Deep-merge a shared workspace template into a downstream ``Cargo.toml``.
 
-The sync workflow can't just overwrite a downstream ``Cargo.toml`` --
-each repo owns its own ``[package]`` / ``[dependencies]`` /
-``[features]`` / ``[[bin]]`` tables. So instead of copying, this verb
-*patches*: replaces the shared tables wholesale from the template,
-leaves everything else untouched.
+The template is treated as a **minimal required set**: every key path
+present in the template must be present in the target with the
+template's value. Keys present in the target but absent from the
+template are left untouched.
 
-Tables replaced wholesale (presence in the template is authoritative):
+Merge rules (recursive, depth-first):
 
-* ``[workspace]``
-* ``[workspace.lints]``
-* every ``[profile.*]`` / ``[profile.*.*]`` table
+* Nested tables (``[a.b]``, ``[a.b.c]``) are recursed into. Existing
+  keys in the target table that aren't in the template's table are
+  preserved.
+* Inline tables (``key = { x = 1, y = 2 }``), arrays, and scalars are
+  treated as opaque values and overwritten wholesale when the
+  template specifies them.
+* Tables in the target that aren't in the template are left alone.
 
-A top-level ``[lints]`` table with ``workspace = true`` is also
-ensured (no-op for pure virtual workspaces; for hybrid
-workspace+package manifests it wires the package's lints to the
-workspace block).
+This means the template never *removes* anything from a downstream
+manifest; it only ensures the shared baseline is present and current.
+Downstreams are free to add their own ``[workspace.members]``,
+extra ``[profile.*]`` entries, etc., without the patcher fighting
+them.
 
-Everything else in the target manifest is preserved verbatim,
-including key order and formatting -- the patcher uses ``tomlkit``
-for a round-trip-preserving edit.
-
-The operation is idempotent.
+The operation is idempotent: running it twice on the same input
+produces the same output as running it once.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import tomlkit
 import typer
-from tomlkit import TOMLDocument
+from tomlkit.container import Container
+from tomlkit.items import Table
 
 from qproj_scripts._common import log
 
-# Top-level tables that are owned by the template and replaced wholesale.
-_SHARED_TOP_LEVEL = ("workspace",)
+
+def _is_table(value: Any) -> bool:
+    """True iff ``value`` is a TOML table (recursable), not an inline table.
+
+    Inline tables (``{ a = 1, b = 2 }``) are semantically a single
+    value in Cargo manifests (e.g. ``rust.unexpected_cfgs = { level
+    = "warn", ... }``) and are treated as opaque scalars.
+    """
+    return isinstance(value, (Table, Container))
 
 
-def _shared_top_level(key: str) -> bool:
-    return key in _SHARED_TOP_LEVEL or key == "profile" or key.startswith("profile.")
-
-
-def _replace_table(doc: TOMLDocument, key: str, value: object) -> None:
-    """Overwrite ``doc[key]`` with ``value`` (or remove the key when value is None)."""
-    if value is None:
-        if key in doc:
-            del doc[key]
-        return
-    doc[key] = value
+def _deep_merge(target: Any, template: Any) -> None:
+    """Recursively ensure every key in ``template`` is set in ``target``."""
+    for key, tpl_value in template.items():
+        if _is_table(tpl_value) and key in target and _is_table(target[key]):
+            _deep_merge(target[key], tpl_value)
+        else:
+            target[key] = tpl_value
 
 
 def patch(target_text: str, template_text: str) -> str:
-    """Return ``target_text`` patched with shared tables from ``template_text``.
+    """Return ``target_text`` deep-merged with ``template_text``.
 
     Pure function; performs no I/O. Round-trips through ``tomlkit`` so
     untouched tables retain their original formatting.
     """
     target = tomlkit.parse(target_text)
     template = tomlkit.parse(template_text)
-
-    # 1. Replace [workspace] and any nested [workspace.*] (notably
-    #    [workspace.lints]) wholesale -- the entire [workspace]
-    #    subtree is template-owned.
-    if "workspace" in template:
-        target["workspace"] = template["workspace"]
-    elif "workspace" in target:
-        del target["workspace"]
-
-    # 2. Replace the entire [profile] subtree wholesale. There is no
-    #    per-repo profile override mechanism, so any [profile.*] not
-    #    in the template is dropped.
-    if "profile" in template:
-        target["profile"] = template["profile"]
-    elif "profile" in target:
-        del target["profile"]
-
-    # 3. Replace [lints] wholesale with a single `workspace = true`
-    #    entry. Cargo refuses to mix workspace inheritance with any
-    #    other keys under [lints]; the per-crate overrides we're
-    #    discarding here are the same content we just injected into
-    #    [workspace.lints].
-    lints = tomlkit.table()
-    lints["workspace"] = True
-    target["lints"] = lints
-
+    _deep_merge(target, template)
     return tomlkit.dumps(target)
 
 
@@ -113,7 +94,7 @@ def main(
         help="Exit non-zero if the target would change; do not write.",
     ),
 ) -> None:
-    """Patch ``target`` in place with shared tables from ``template``."""
+    """Patch ``target`` in place by deep-merging ``template`` into it."""
     original = target.read_text()
     patched = patch(original, template.read_text())
 
