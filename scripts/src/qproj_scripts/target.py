@@ -40,6 +40,31 @@ def _ref_exists(active: Path, ref: str) -> bool:
     return result.returncode == 0
 
 
+def _worktree_holding(active: Path, branch: str) -> str | None:
+    """Return the path of the worktree currently holding ``branch``, if any.
+
+    Git refuses to check out a branch that's already checked out in
+    another worktree, so we surface this up-front with a useful error
+    rather than letting the user see a cryptic ``fatal:`` message.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(active), "worktree", "list", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    current_path: str | None = None
+    needle = f"refs/heads/{branch}"
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            current_path = line[len("worktree ") :]
+        elif line == f"branch {needle}":
+            return current_path
+    return None
+
+
 def _is_dirty(active: Path) -> bool:
     result = subprocess.run(
         ["git", "-C", str(active), "status", "--porcelain"],
@@ -78,6 +103,16 @@ def retarget(target: str, *, clobber: bool = False) -> None:
 
     local = _ref_exists(active, f"refs/heads/{target}")
     remote = _ref_exists(active, f"refs/remotes/{DEFAULT_REMOTE}/{target}")
+
+    if local:
+        holder = _worktree_holding(active, target)
+        if holder is not None and Path(holder).resolve() != active.resolve():
+            log(
+                f"branch '{target}' is checked out in {holder}; cd there directly.",
+                level="error",
+            )
+            raise typer.Exit(code=1)
+
     checkout = ["git", "-C", str(active), "checkout"]
     if clobber:
         checkout.append("-f")
@@ -96,6 +131,12 @@ def retarget(target: str, *, clobber: bool = False) -> None:
             )
             raise typer.Exit(code=1)
         run([*checkout, "-B", target, f"{DEFAULT_REMOTE}/{DEFAULT_BRANCH}"])
+
+    if clobber:
+        # `git checkout -f` only resets tracked files; the dirty check
+        # rejects untracked files too, so clobber must wipe them as well
+        # for the post-condition to match.
+        run(["git", "-C", str(active), "clean", "-fd"])
 
     _common.run(["git", "-C", str(active), "log", "-1", "--oneline"])
 

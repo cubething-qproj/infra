@@ -154,8 +154,21 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
     active = repo_dir / "active"
     if not active.is_dir():
         log(f"{active} missing", "info")
+        # Detached HEAD at main's tip: the main/ worktree already holds
+        # the `main` branch ref, and git refuses to check out the same
+        # branch in two worktrees. `qproj target <branch>` is the
+        # supported way to put active/ onto an actual branch.
         run(
-            ["git", "-C", str(bare), "worktree", "add", str(active), DEFAULT_BRANCH],
+            [
+                "git",
+                "-C",
+                str(bare),
+                "worktree",
+                "add",
+                "--detach",
+                str(active),
+                DEFAULT_BRANCH,
+            ],
             dry=dry,
         )
     else:

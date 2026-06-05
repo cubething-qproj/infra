@@ -31,7 +31,6 @@ from pathlib import Path
 import tomlkit
 import typer
 from tomlkit import TOMLDocument
-from tomlkit.items import Table
 
 from qproj_scripts._common import log
 
@@ -77,13 +76,14 @@ def patch(target_text: str, template_text: str) -> str:
     elif "profile" in target:
         del target["profile"]
 
-    # 3. Ensure top-level [lints] workspace = true so per-crate
-    #    manifests inherit the workspace lints block.
-    lints = target.get("lints")
-    if not isinstance(lints, Table):
-        lints = tomlkit.table()
-        target["lints"] = lints
+    # 3. Replace [lints] wholesale with a single `workspace = true`
+    #    entry. Cargo refuses to mix workspace inheritance with any
+    #    other keys under [lints]; the per-crate overrides we're
+    #    discarding here are the same content we just injected into
+    #    [workspace.lints].
+    lints = tomlkit.table()
     lints["workspace"] = True
+    target["lints"] = lints
 
     return tomlkit.dumps(target)
 
