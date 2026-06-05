@@ -1,60 +1,23 @@
 # ------------------------------------------
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # -------------------------------- 𝒒𝒑𝒓𝒐𝒋 --
+#
+# Metarepo-root justfile (symlinked into each <repo>/ from .config/).
+# Holds cross-cutting verbs only -- per-crate recipes (build, play,
+# check, ...) live in <wt>/justfile, sourced from
+# infra/config/worktree.justfile, and reached here via the import
+# below so `cd <repo> && just play` continues to work by delegating to
+# whichever worktree is checked out at active/.
+
+import 'active/justfile'
 
 QPROJ_REF := env("QPROJ_SCRIPTS_REF", "main")
 QPROJ_GIT_URL := "git+https://github.com/cubething-qproj/infra.git@" + QPROJ_REF + "#subdirectory=scripts"
 SCRIPTS_SRC := env("QPROJ_SCRIPTS_SRC", QPROJ_GIT_URL)
 qproj := "qproj-scripts"
-NIXGL := env("NIXGL", "nixVulkanNvidia")
 
 _default:
     just --list
-
-# Build the workspace.
-build *args:
-    {{ qproj }} build {{ args }}
-
-# Run the application.
-play *args:
-    nix run --impure github:nix-community/nixGL#{{ NIXGL }} -- \
-        {{ qproj }} play {{ args }}
-
-# Lint with Clippy and bevy_lint.
-check *args:
-    {{ qproj }} check {{ args }}
-
-# Run clippy.
-clippy *args:
-    {{ qproj }} clippy {{ args }}
-
-# Run bevy_lint.
-bevy-lint *args:
-    {{ qproj }} bevy-lint {{ args }}
-
-# Check dependencies with cargo-deny.
-deny:
-    {{ qproj }} deny
-
-# Run tests via cargo-nextest.
-test *args:
-    {{ qproj }} test {{ args }}
-
-# Generate test coverage report.
-coverage *args:
-    {{ qproj }} coverage {{ args }}
-
-# Fix all fixable issues.
-fix *args:
-    {{ qproj }} fix {{ args }}
-
-# Test CI locally with act.
-ci *args:
-    {{ qproj }} ci {{ args }}
-
-# Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.
-ra-check *args:
-    {{ qproj }} ra-check {{ args }}
 
 # Set up and synchronize proj repos.
 sync *args:
