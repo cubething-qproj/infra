@@ -9,7 +9,7 @@
 # below so `cd <repo> && just play` continues to work by delegating to
 # whichever worktree is checked out at active/.
 
-import 'active/justfile'
+import? 'active/justfile'
 
 QPROJ_REF := env("QPROJ_SCRIPTS_REF", "main")
 QPROJ_GIT_URL := "git+https://github.com/cubething-qproj/infra.git@" + QPROJ_REF + "#subdirectory=scripts"

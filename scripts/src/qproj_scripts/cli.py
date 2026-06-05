@@ -85,7 +85,7 @@ _register(
     ctx=_STRICT,
     help="Sync the local clone-tree of workflow consumer repos.",
 )
-_register("target", target.main, ctx=_STRICT, help="Repoint ./active at a worktree dir.")
+_register("target", target.main, ctx=_STRICT, help="Check out a branch in active/.")
 _register("add", add.main, ctx=_STRICT, help="Create a new worktree off origin/$DEFAULT_BRANCH.")
 _register("prune", prune.main, ctx=_STRICT, help="Clean up all already-merged worktrees.")
 _register(

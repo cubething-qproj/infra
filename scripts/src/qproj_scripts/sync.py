@@ -34,12 +34,16 @@ def envrc() -> str:
     # (which prepends `nix run github:nix-community/nixGL#$NIXGL`), so
     # the devshell itself is pure -- no `--impure`, no per-GPU variant.
     # Override the wrapper for a host by exporting `NIXGL` in .env.local.
+    #
+    # `active/` is a real worktree (not a symlink) post-Step-4, so the
+    # flake path is fixed; whichever branch is checked out at active/
+    # supplies the flake.
     return (
         'export GH_TOKEN=$(gh auth token 2>/dev/null || echo "")\n'
         "export NIXPKGS_ALLOW_UNFREE=1\n"
         "export LOCAL=1\n"
         "\n"
-        "use flake path:infra/$(readlink infra/active)\n"
+        "use flake path:infra/active\n"
     )
 
 
@@ -52,7 +56,62 @@ def _symlink(target: Path, link: Path, *, dry: bool) -> None:
         link.unlink()
     elif link.is_dir():
         shutil.rmtree(link)
+    link.parent.mkdir(parents=True, exist_ok=True)
     link.symlink_to(target)
+
+
+# Top-level paths inside <repo>/ that earlier sync versions created as
+# symlinks into the shared .config/ overlay, but which the post-Step-4
+# layout owns at the per-worktree level instead. Removed on first sync
+# if still present.
+_STALE_REPO_ROOT_LINKS = ("Cargo.toml", ".cargo", "nextest.toml")
+
+
+def _prune_stale(repo_dir: Path, *, dry: bool) -> None:
+    """Drop layout artifacts owned by previous sync versions.
+
+    * ``<repo>/active`` used to be a symlink retargeted by ``qproj target``;
+      it is now a real worktree, so any leftover symlink must go before
+      we try to create the worktree.
+    * ``<repo>/Cargo.toml``, ``.cargo``, ``nextest.toml`` used to be
+      symlinks into the shared ``.config/`` overlay; those files are
+      now owned per-worktree and synced via the downstream-sync
+      workflow.
+    """
+    level = "dry" if dry else "info"
+    active = repo_dir / "active"
+    if active.is_symlink():
+        log(f"removing stale symlink {active}", level=level)
+        if not dry:
+            active.unlink()
+
+    for name in _STALE_REPO_ROOT_LINKS:
+        stale = repo_dir / name
+        if stale.is_symlink():
+            log(f"removing stale symlink {stale}", level=level)
+            if not dry:
+                stale.unlink()
+
+
+def _sync_config_links(repo_dir: Path, config_dir: Path, *, dry: bool) -> None:
+    """Symlink the shared .config/ overlay into ``repo_dir``.
+
+    Top-level entries are linked directly (``<repo>/<name>`` ->
+    ``.config/<name>``), except for the ``.zed/`` directory: its
+    children are linked file-by-file into a real ``<repo>/.zed/`` dir
+    so that per-repo Zed customizations (if any) can coexist with the
+    shared settings.json.
+    """
+    for entry in asset(".config").iterdir():
+        name = entry.name
+        if name == ".zed":
+            zed_dir = repo_dir / ".zed"
+            if not dry:
+                zed_dir.mkdir(parents=True, exist_ok=True)
+            for child in entry.iterdir():
+                _symlink(config_dir / ".zed" / child.name, zed_dir / child.name, dry=dry)
+        else:
+            _symlink(config_dir / name, repo_dir / name, dry=dry)
 
 
 def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobber: bool) -> None:
@@ -90,6 +149,8 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
     run(["git", "-C", str(bare), "config", "worktree.useRelativePaths", "true"], dry=dry)
     run(["git", "-C", str(bare), "worktree", "repair"], dry=dry)
 
+    _prune_stale(repo_dir, dry=dry)
+
     log(f"syncing {DEFAULT_BRANCH}", "info")
     wt = repo_dir / DEFAULT_BRANCH
     if not wt.is_dir():
@@ -97,6 +158,17 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
         run(["git", "-C", str(bare), "worktree", "add", str(wt), DEFAULT_BRANCH], dry=dry)
     else:
         log(f"{wt} exists", "info")
+
+    log("syncing active worktree", "info")
+    active = repo_dir / "active"
+    if not active.is_dir():
+        log(f"{active} missing", "info")
+        run(
+            ["git", "-C", str(bare), "worktree", "add", str(active), DEFAULT_BRANCH],
+            dry=dry,
+        )
+    else:
+        log(f"{active} exists", "info")
 
     status = ""
     if not dry:
@@ -120,8 +192,7 @@ def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobbe
     run(["git", "-C", str(wt), "clean", "-fd"], dry=dry)
 
     log("Symlinking config files", "info")
-    for asset_ in asset(".config").iterdir():
-        _symlink(config_dir / asset_.name, repo_dir / asset_.name, dry=dry)
+    _sync_config_links(repo_dir, config_dir, dry=dry)
 
 
 def main(
