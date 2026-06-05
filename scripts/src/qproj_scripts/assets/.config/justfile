@@ -2,12 +2,9 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # -------------------------------- 𝒒𝒑𝒓𝒐𝒋 --
 #
-# Metarepo-root justfile (symlinked into each <repo>/ from .config/).
-# Holds cross-cutting verbs only -- per-crate recipes (build, play,
-# check, ...) live in <wt>/justfile, sourced from
-# infra/config/worktree.justfile, and reached here via the import
-# below so `cd <repo> && just play` continues to work by delegating to
-# whichever worktree is checked out at active/.
+# Metarepo-root justfile. Cross-cutting verbs only; per-crate recipes
+# (build, play, check, ...) live in the active worktree's justfile,
+# imported below so `cd <repo> && just play` reaches them.
 
 import? 'active/justfile'
 

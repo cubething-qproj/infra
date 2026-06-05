@@ -1,13 +1,10 @@
 """Patch a downstream ``Cargo.toml`` with the shared workspace template.
 
-This verb implements the merge half of the
-``infra-sync-downstream`` flow: the file-copy loop handles single-file
-syncs (``deny.toml``, ``flake.nix``, ...), but ``Cargo.toml`` cannot
-just be overwritten because each downstream repo owns the
-``[package]`` / ``[dependencies]`` / ``[features]`` / ``[[bin]]`` tables
-that describe its own crate. So instead of copying, we *patch* the
-target file: replace the shared tables wholesale from the template,
-leave everything else untouched.
+The sync workflow can't just overwrite a downstream ``Cargo.toml`` --
+each repo owns its own ``[package]`` / ``[dependencies]`` /
+``[features]`` / ``[[bin]]`` tables. So instead of copying, this verb
+*patches*: replaces the shared tables wholesale from the template,
+leaves everything else untouched.
 
 Tables replaced wholesale (presence in the template is authoritative):
 
@@ -16,16 +13,15 @@ Tables replaced wholesale (presence in the template is authoritative):
 * every ``[profile.*]`` / ``[profile.*.*]`` table
 
 A top-level ``[lints]`` table with ``workspace = true`` is also
-ensured (no-op if the manifest is a pure virtual workspace; for
-hybrid workspace+package manifests it wires the package's lints to
-the workspace block we just installed).
+ensured (no-op for pure virtual workspaces; for hybrid
+workspace+package manifests it wires the package's lints to the
+workspace block).
 
 Everything else in the target manifest is preserved verbatim,
 including key order and formatting -- the patcher uses ``tomlkit``
 for a round-trip-preserving edit.
 
-The operation is idempotent: a second invocation against
-already-patched content produces zero diff.
+The operation is idempotent.
 """
 
 from __future__ import annotations
@@ -66,23 +62,23 @@ def patch(target_text: str, template_text: str) -> str:
     template = tomlkit.parse(template_text)
 
     # 1. Replace [workspace] and any nested [workspace.*] (notably
-    #    [workspace.lints]) wholesale. We treat the entire [workspace]
-    #    subtree as template-owned.
+    #    [workspace.lints]) wholesale -- the entire [workspace]
+    #    subtree is template-owned.
     if "workspace" in template:
         target["workspace"] = template["workspace"]
     elif "workspace" in target:
         del target["workspace"]
 
-    # 2. Replace the entire [profile] subtree wholesale. Per the plan
-    #    there is no per-repo profile override mechanism, so any
-    #    [profile.*] not in the template should be dropped.
+    # 2. Replace the entire [profile] subtree wholesale. There is no
+    #    per-repo profile override mechanism, so any [profile.*] not
+    #    in the template is dropped.
     if "profile" in template:
         target["profile"] = template["profile"]
     elif "profile" in target:
         del target["profile"]
 
     # 3. Ensure top-level [lints] workspace = true so per-crate
-    #    manifests inherit the workspace lints block we just installed.
+    #    manifests inherit the workspace lints block.
     lints = target.get("lints")
     if not isinstance(lints, Table):
         lints = tomlkit.table()

@@ -34,10 +34,6 @@ def envrc() -> str:
     # (which prepends `nix run github:nix-community/nixGL#$NIXGL`), so
     # the devshell itself is pure -- no `--impure`, no per-GPU variant.
     # Override the wrapper for a host by exporting `NIXGL` in .env.local.
-    #
-    # `active/` is a real worktree (not a symlink) post-Step-4, so the
-    # flake path is fixed; whichever branch is checked out at active/
-    # supplies the flake.
     return (
         'export GH_TOKEN=$(gh auth token 2>/dev/null || echo "")\n'
         "export NIXPKGS_ALLOW_UNFREE=1\n"
@@ -60,23 +56,19 @@ def _symlink(target: Path, link: Path, *, dry: bool) -> None:
     link.symlink_to(target)
 
 
-# Top-level paths inside <repo>/ that earlier sync versions created as
-# symlinks into the shared .config/ overlay, but which the post-Step-4
-# layout owns at the per-worktree level instead. Removed on first sync
-# if still present.
+# Top-level paths inside <repo>/ owned by per-worktree sync rather than
+# by the shared .config/ overlay. Any symlink at these paths would
+# shadow the real per-worktree file inside active/, so we unlink them
+# defensively on every sync.
 _STALE_REPO_ROOT_LINKS = ("Cargo.toml", ".cargo", "nextest.toml")
 
 
 def _prune_stale(repo_dir: Path, *, dry: bool) -> None:
-    """Drop layout artifacts owned by previous sync versions.
+    """Drop layout artifacts that conflict with the canonical layout.
 
-    * ``<repo>/active`` used to be a symlink retargeted by ``qproj target``;
-      it is now a real worktree, so any leftover symlink must go before
-      we try to create the worktree.
-    * ``<repo>/Cargo.toml``, ``.cargo``, ``nextest.toml`` used to be
-      symlinks into the shared ``.config/`` overlay; those files are
-      now owned per-worktree and synced via the downstream-sync
-      workflow.
+    ``<repo>/active`` must be a real worktree, not a symlink:
+    ``Path.is_dir()`` follows symlinks, so a stale symlink here would
+    hide a missing worktree and skip its creation.
     """
     level = "dry" if dry else "info"
     active = repo_dir / "active"
@@ -96,11 +88,10 @@ def _prune_stale(repo_dir: Path, *, dry: bool) -> None:
 def _sync_config_links(repo_dir: Path, config_dir: Path, *, dry: bool) -> None:
     """Symlink the shared .config/ overlay into ``repo_dir``.
 
-    Top-level entries are linked directly (``<repo>/<name>`` ->
-    ``.config/<name>``), except for the ``.zed/`` directory: its
-    children are linked file-by-file into a real ``<repo>/.zed/`` dir
-    so that per-repo Zed customizations (if any) can coexist with the
-    shared settings.json.
+    Top-level entries are linked directly. ``.zed/`` is special-cased
+    so per-repo Zed tweaks can coexist with the shared settings.json:
+    a real ``<repo>/.zed/`` dir is created and each child file is
+    symlinked individually rather than the whole directory.
     """
     for entry in asset(".config").iterdir():
         name = entry.name

@@ -1,10 +1,8 @@
 """Check out a branch in the metarepo's ``active/`` worktree.
 
-Pre-Step-4 this verb retargeted a symlink (``ln -s <dir> active``).
-Post-Step-4 ``active/`` is a real ``git worktree``: ``target`` now
-fetches and runs ``git checkout`` inside it. The verb still operates
-from the metarepo root (the dir that contains ``.bare/`` and
-``active/``).
+Operates from the metarepo root (the dir that contains ``.bare/`` and
+``active/``). ``active/`` is a real ``git worktree``; ``target``
+fetches and runs ``git checkout`` inside it.
 
 Semantics:
 
