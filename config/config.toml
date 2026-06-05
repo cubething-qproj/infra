@@ -14,5 +14,5 @@ rustflags = [
     # Nightly
     "-Zshare-generics=y",
     "-Zthreads=0",
-    "-Clink-arg=-fuse-ld=/usr/bin/mold",
+    "-Clink-arg=-fuse-ld=mold",
 ]
