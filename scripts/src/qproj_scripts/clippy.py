@@ -1,7 +1,7 @@
 """Run Clippy with the workspace's standard flags.
 
 Pins ``--target-dir=target/clippy`` so Clippy's incremental cache does not
-collide with plain ``cargo build`` or ``bevy_lint``.
+collide with plain ``cargo build``.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from qproj_scripts import _common
 def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
     """Return the ``(argv, env_overrides)`` for the standard Clippy invocation.
 
-    Exposed so :mod:`qproj_scripts.check` can launch Clippy in parallel with
-    ``bevy_lint`` without re-entering a Python interpreter.
+    Exposed so :mod:`qproj_scripts.check` can launch Clippy without
+    re-entering a Python interpreter.
     """
     argv = ["cargo", "clippy", "--all-features", "--target-dir=target/clippy", *extra]
     return argv, {}

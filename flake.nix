@@ -11,11 +11,6 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # bevy_cli ships its own flake exposing a `bevy` package whose
-    # binary includes the `lint` subcommand (which in turn dispatches to
-    # bevy_lint_driver). Consuming it directly removes the need to vendor
-    # the bevy_cli source and rebuild bevy_lint from scratch via crane.
-    bevy_cli.url = "github:TheBevyFlock/bevy_cli";
   };
 
   # GPU driver wrapping (formerly via nixGL inputs + a dedicated `nvidia`
@@ -29,16 +24,12 @@
     nixpkgs,
     flake-utils,
     rust-overlay,
-    bevy_cli,
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
         overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {inherit system overlays;};
 
-        # Keep in sync with bevy_cli's rust-toolchain.toml. The
-        # upstream flake's `bevy_lint_driver` is built against this exact
-        # nightly; running it under any other rustc ABI fails to load.
         mkRustToolchain = {
           extensions,
           targets,
@@ -50,7 +41,6 @@
         rustToolchain = mkRustToolchain {
           extensions = [
             "rustc-codegen-cranelift-preview"
-            "rustc-dev"
             "llvm-tools-preview"
             "clippy"
             "rust-analyzer"
@@ -63,9 +53,7 @@
         };
 
         # Trimmed toolchain for CI. Drops IDE-only extensions
-        # (rust-analyzer, rust-src), the rustc-dev internals extension
-        # (only needed to compile rustc plugins ourselves; bevy_lint_driver
-        # ships prebuilt), and the windows cross-compile target.
+        # (rust-analyzer, rust-src) and the windows cross-compile target.
         # cranelift stays: .cargo/config.toml pins it as the dev codegen-backend.
         rustToolchainCi = mkRustToolchain {
           extensions = [
@@ -77,10 +65,6 @@
             "x86_64-unknown-linux-gnu"
           ];
         };
-
-        # The `bevy` CLI from the upstream flake. `bevy lint` is the
-        # entry point; the package bundles the lint driver alongside it.
-        bevy-cli = bevy_cli.packages.${system}.default;
 
         linuxDeps = pkgs.lib.optionals pkgs.stdenv.isLinux (with pkgs; [
           alsa-lib
@@ -101,7 +85,6 @@
               linuxDeps
               ++ [
                 toolchain
-                bevy-cli
               ];
 
             packages = extraPackages;

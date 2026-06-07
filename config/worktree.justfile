@@ -19,7 +19,7 @@ play *args:
     nix run --impure github:nix-community/nixGL#{{ NIXGL }} -- \
         {{ qproj }} play {{ args }}
 
-# Lint with Clippy and bevy_lint.
+# Lint with Clippy.
 [working-directory: '.']
 check *args:
     {{ qproj }} check {{ args }}
@@ -28,11 +28,6 @@ check *args:
 [working-directory: '.']
 clippy *args:
     {{ qproj }} clippy {{ args }}
-
-# Run bevy_lint.
-[working-directory: '.']
-bevy-lint *args:
-    {{ qproj }} bevy-lint {{ args }}
 
 # Check dependencies with cargo-deny.
 [working-directory: '.']
@@ -59,7 +54,7 @@ fix *args:
 ci *args:
     {{ qproj }} ci {{ args }}
 
-# Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.
+# Emit Clippy diagnostics as JSON for rust-analyzer.
 [working-directory: '.']
 ra-check *args:
     {{ qproj }} ra-check {{ args }}

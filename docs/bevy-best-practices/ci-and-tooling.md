@@ -17,9 +17,8 @@ lint configuration that bare `cargo` won't apply.
 |---|---|
 | `just build [args]` | Build the workspace. Wraps `scripts/build.py`. |
 | `just play [args]` | Run the application (`quell`). |
-| `just check [args]` | clippy + bevy_lint together. The default pre-commit check. |
-| `just clippy [args]` | clippy alone. |
-| `just bevy-lint [args]` | bevy_lint alone. |
+| `just check [args]` | clippy across the workspace. The default pre-commit check. |
+| `just clippy [args]` | clippy alone (alias of `check`). |
 | `just deny` | cargo-deny dependency audit. |
 | `just test [args]` | Run tests via cargo-nextest. |
 | `just coverage [args]` | Generate test coverage report. |

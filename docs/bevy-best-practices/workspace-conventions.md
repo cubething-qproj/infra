@@ -8,25 +8,14 @@
 
 ## Toolchain
 
-This workspace uses **nightly Rust**, pinned to whatever `bevy_lint`
-requires (currently `nightly-2026-01-22`). Updated when `bevy_lint`
-updates. Pinned via `rust-toolchain.toml` at the metarepo root.
+This workspace uses **nightly Rust**, pinned in `flake.nix` to keep
+the `rustc-codegen-cranelift-preview` backend (used by
+`.cargo/config.toml` for fast dev builds) and `rust-analyzer`/`rust-src`
+for the IDE shell. Bump the date in `flake.nix` when picking up a new
+nightly.
 
 There is **no MSRV** (`rust-version` is not declared). MSRV is
 meaningless under a nightly pin.
-
-`quell` and `q_screens` use:
-
-```rust
-#![feature(register_tool)]
-#![register_tool(bevy)]
-#![allow(bevy::panicking_methods)]
-```
-
-This is intentional — `register_tool(bevy)` enables `bevy_lint`
-attributes on stable-shaped code. Crates that participate in
-`bevy_lint` declare these inner attributes; crates that don't can omit
-them.
 
 ---
 
@@ -43,7 +32,6 @@ missing_docs = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 unused_qualifications = "warn"
 unsafe_code = "deny"
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(bevy_lint)"] }
 
 [workspace.lints.clippy]
 # Warned
@@ -233,9 +221,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/cubething-qproj/q_newcrate"
 description = "..."
 
-[package.metadata.bevy_lint]
-panicking_methods = { level = "warn" }
-
 [lints]
 workspace = true
 
@@ -254,9 +239,6 @@ And in `lib.rs`:
 
 ```rust
 #![doc = include_str!("../README.md")]
-#![feature(register_tool)]
-#![register_tool(bevy)]
-#![allow(bevy::panicking_methods, reason = "transitional, prefer Result")]
 
 mod data;
 mod plugin;

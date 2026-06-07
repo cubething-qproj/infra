@@ -23,7 +23,6 @@ import typer
 from qproj_scripts import (
     _common,
     add,
-    bevy_lint,
     build,
     check,
     ci,
@@ -66,9 +65,8 @@ def _register(name: str, fn, *, ctx, help: str) -> None:
 
 _register("build", build.main, ctx=_PASSTHROUGH, help="Build the workspace.")
 _register("play", play.main, ctx=_PASSTHROUGH, help="Build and run a quell binary.")
-_register("check", check.main, ctx=_STRICT, help="Run Clippy and bevy_lint concurrently.")
+_register("check", check.main, ctx=_STRICT, help="Run Clippy across the workspace.")
 _register("clippy", clippy.main, ctx=_PASSTHROUGH, help="Run Clippy.")
-_register("bevy-lint", bevy_lint.main, ctx=_PASSTHROUGH, help="Run bevy_lint.")
 _register("deny", deny.main, ctx=_STRICT, help="Audit dependencies via cargo deny.")
 _register("test", test.main, ctx=_PASSTHROUGH, help="Run the workspace test suite via nextest.")
 _register("coverage", coverage.main, ctx=_PASSTHROUGH, help="Generate a coverage report.")
@@ -77,7 +75,7 @@ _register(
     "ra-check",
     ra_check.main,
     ctx=_PASSTHROUGH,
-    help="Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.",
+    help="Emit Clippy diagnostics as JSON for rust-analyzer.",
 )
 _register(
     "sync",
