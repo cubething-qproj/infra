@@ -31,6 +31,10 @@ target *args:
 add *args:
     {{ qproj }} add {{ args }}
 
+# Initialize a new downstream repo under cubething-qproj/.
+init *args:
+    {{ qproj }} init {{ args }}
+
 # Prune merged branches.
 prune *args:
     {{ qproj }} prune {{ args }}
