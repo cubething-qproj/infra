@@ -30,6 +30,7 @@ from qproj_scripts import (
     clippy,
     coverage,
     deny,
+    init,
     patch_cargo,
     play,
     prune,
@@ -87,6 +88,12 @@ _register(
 )
 _register("target", target.main, ctx=_STRICT, help="Check out a branch in active/.")
 _register("add", add.main, ctx=_STRICT, help="Create a new worktree off origin/$DEFAULT_BRANCH.")
+_register(
+    "init",
+    init.main,
+    ctx=_STRICT,
+    help="Initialize a new downstream repo under cubething-qproj/.",
+)
 _register("prune", prune.main, ctx=_STRICT, help="Clean up all already-merged worktrees.")
 _register(
     "patch-cargo",
