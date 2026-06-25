@@ -173,8 +173,9 @@ def main(
     if assets is not None:
         args += ["-A", str(assets)]
     else:
-        assets_path = Path.cwd() / "active" / "assets"
-        typer.echo(f" *** assets_path: {assets_path} ***")
+        # `just play` is always invoked from the worktree root, so assets
+        # live directly under cwd.
+        assets_path = Path.cwd() / "assets"
         if assets_path.exists():
             args += ["-A", str(assets_path)]
 
