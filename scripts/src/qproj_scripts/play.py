@@ -18,6 +18,7 @@ import os
 import re
 import shlex
 import subprocess
+import tomllib
 from pathlib import Path
 
 import typer
@@ -89,6 +90,58 @@ def _patch_elf_for_psync(target: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Cargo target detection
+# ---------------------------------------------------------------------------
+
+
+def _default_bin_name(cargo_toml: Path = Path("Cargo.toml")) -> str:
+    """Return the crate's default `[[bin]]` target name.
+
+    Mirrors cargo's rules in the common cases:
+      * `[package].default-run` wins outright.
+      * Otherwise, collect explicit `[[bin]]` targets plus the implicit
+        `src/main.rs` bin (named after `[package].name`). If exactly one
+        candidate exists, use it. Otherwise raise.
+    """
+    if not cargo_toml.exists():
+        raise typer.BadParameter(
+            f"No Cargo.toml found at {cargo_toml.resolve()}; pass an explicit "
+            "binary path or use -p/--package."
+        )
+    with cargo_toml.open("rb") as fh:
+        manifest = tomllib.load(fh)
+
+    pkg = manifest.get("package", {})
+    default_run = pkg.get("default-run")
+    if default_run:
+        return default_run
+
+    candidates: list[str] = []
+    root = cargo_toml.parent
+    pkg_name = pkg.get("name")
+    has_implicit_main = (root / "src" / "main.rs").exists() and pkg_name
+
+    explicit_bins = manifest.get("bin", []) or []
+    explicit_names = [b.get("name") for b in explicit_bins if b.get("name")]
+
+    # If a [[bin]] reuses src/main.rs (path or implicit), don't double-count.
+    if has_implicit_main and pkg_name not in explicit_names:
+        candidates.append(pkg_name)
+    candidates.extend(explicit_names)
+
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        raise typer.BadParameter(
+            f"No binary targets found in {cargo_toml}; pass an explicit binary path."
+        )
+    raise typer.BadParameter(
+        f"Multiple bin targets {candidates} in {cargo_toml}; set "
+        "`[package].default-run`, pass an explicit binary path, or use -p/--package."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main command
 # ---------------------------------------------------------------------------
 
@@ -115,8 +168,7 @@ def main(
 ) -> None:
     """Build, then exec/relay the binary locally or to the psync host."""
     file_set = False
-    # TODO: Read this in from Cargo.toml
-    file_path = Path("target/debug/quell")
+    file_path: Path | None = None
     extras = list(ctx.args)
     if extras:
         # First positional extra is treated as the explicit binary path.
@@ -130,12 +182,18 @@ def main(
         if not file_set:
             file_path = Path(f"target/debug/{package}")
 
+    if file_path is None and not example:
+        # No explicit binary, no -p, no --example: fall back to the crate's
+        # default bin target (mirrors `cargo run` semantics).
+        file_path = Path(f"target/debug/{_default_bin_name()}")
+
     # Build via the sibling build verb (in-process).
     build_extra = [*shlex.split(build_args), *cargo_package, *cargo_example]
     build_argv, build_env = build.cmd(build_extra)
     _common.run(build_argv, env_overrides=build_env)
 
     target_path = Path(f"./target/debug/examples/{example}") if example else file_path
+    assert target_path is not None
 
     args = [
         "uvx",
