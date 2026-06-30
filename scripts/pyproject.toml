@@ -15,7 +15,12 @@ qproj-scripts = "qproj_scripts.cli:app"
 dev = [
     "basedpyright>=1.20",
     "ruff>=0.6",
+    "pytest>=8",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [build-system]
 requires = ["hatchling"]
