@@ -43,3 +43,7 @@ jobs:
             - name: basedpyright
               working-directory: scripts
               run: uv run basedpyright
+
+            - name: pytest
+              working-directory: scripts
+              run: uv run pytest -q
