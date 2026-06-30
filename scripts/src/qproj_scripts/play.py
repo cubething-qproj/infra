@@ -142,6 +142,9 @@ def _default_package_name() -> str:
 # ---------------------------------------------------------------------------
 
 
+_VALID_MODES = frozenset({"auto", "local", "remote"})
+
+
 def build_plan(
     *,
     example: str | None,
@@ -152,6 +155,7 @@ def build_plan(
     assets: Path | None,
     extras: list[str],
     environ: Mapping[str, str],
+    mode: str = "auto",
 ) -> RunPlan:
     """Resolve CLI arguments into a fully-determined :class:`RunPlan`.
 
@@ -194,7 +198,18 @@ def build_plan(
         assets_path = Path.cwd() / "assets"
         assets_autodetected = assets_path if assets_path.exists() else None
 
-    mode: Literal["local", "remote"] = "remote" if environ.get("SSH_CLIENT") else "local"
+    if mode not in _VALID_MODES:
+        raise typer.BadParameter(
+            f"--mode must be one of {sorted(_VALID_MODES)}; got {mode!r}"
+        )
+    if mode == "auto":
+        resolved_mode: Literal["local", "remote"] = (
+            "remote"
+            if environ.get("SSH_CLIENT") and environ.get("PSYNC_SERVER_IP")
+            else "local"
+        )
+    else:
+        resolved_mode = mode  # type: ignore[assignment]
 
     return RunPlan(
         target_path=target_path,
@@ -204,7 +219,7 @@ def build_plan(
         assets_autodetected=assets_autodetected,
         env_vars=env_vars,
         cmd_args=cmd_args,
-        mode=mode,
+        mode=resolved_mode,
     )
 
 
@@ -286,6 +301,16 @@ def main(
         "--assets",
         help="Override the assets directory (default: autodetected).",
     ),
+    mode: str = typer.Option(
+        "auto",
+        "-m",
+        "--mode",
+        help=(
+            "'auto' (default, picks remote when SSH_CLIENT and PSYNC_SERVER_IP "
+            "are both set), 'local' (force local exec), 'remote' (force psync "
+            "handoff)."
+        ),
+    ),
 ) -> None:
     """Build, then exec/relay the binary locally or to the psync host."""
     plan = build_plan(
@@ -297,6 +322,7 @@ def main(
         assets=assets,
         extras=list(ctx.args),
         environ=os.environ,
+        mode=mode,
     )
     _common.run(plan.build_argv, env_overrides=plan.build_env)
     if plan.mode == "remote":

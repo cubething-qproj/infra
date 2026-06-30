@@ -393,6 +393,84 @@ def test_remote_mode_still_autodetects_assets_when_minus_A_absent(
 
 
 # ---------------------------------------------------------------------------
+# Explicit --mode flag
+# ---------------------------------------------------------------------------
+
+
+def test_auto_mode_without_psync_server_ip_picks_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # SSH_CLIENT set, PSYNC_SERVER_IP not -- new auto rule picks local,
+    # avoiding the silent crash inside _patch_elf_for_psync.
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.setenv("SSH_CLIENT", "1.2.3.4 22 5678")
+    monkeypatch.delenv("PSYNC_SERVER_IP", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), [])
+
+    assert captured["execvpe"], "expected local exec path"
+    # No remote-mode shell-outs should have been recorded.
+    for argv, _env in captured["runs"][1:]:
+        head = argv[0] if argv else ""
+        assert head not in {"patchelf", "rsync"}
+        assert not (argv[:2] == ["uvx", "--from"] and "psync" in argv)
+
+
+def test_explicit_mode_local_forces_local_even_with_full_remote_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    _remote_env(monkeypatch)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), ["--mode", "local"])
+
+    assert captured["execvpe"], "expected local exec path under --mode local"
+    for argv, _env in captured["runs"][1:]:
+        head = argv[0] if argv else ""
+        assert head not in {"patchelf", "rsync"}
+        assert not (argv[:2] == ["uvx", "--from"] and "psync" in argv)
+
+
+def test_explicit_mode_remote_forces_remote_without_ssh_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    monkeypatch.setenv("PSYNC_SERVER_IP", "10.0.0.5")
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), ["--mode", "remote"])
+
+    argvs = [argv for argv, _env in captured["runs"]]
+    assert any(a[:2] == ["patchelf", "--set-interpreter"] for a in argvs)
+    assert any(a[:2] == ["patchelf", "--set-rpath"] for a in argvs)
+    assert any(a and a[0] == "rsync" for a in argvs)
+    assert any(
+        a[:2] == ["uvx", "--from"] and "cubething_psync" in a and "psync" in a
+        for a in argvs
+    )
+    assert not captured["execvpe"], "remote path should not call execvpe"
+
+
+def test_invalid_mode_value_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    result = _invoke(_make_app(), ["--mode", "bogus"])
+
+    assert result.exit_code != 0
+    combined = (result.output or "") + (
+        "" if result.exception is None else str(result.exception)
+    )
+    assert "auto" in combined and "local" in combined and "remote" in combined
+
+
+# ---------------------------------------------------------------------------
 # Virtual-workspace error handling
 # ---------------------------------------------------------------------------
 
