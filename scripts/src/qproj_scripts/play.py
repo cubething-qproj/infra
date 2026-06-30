@@ -19,11 +19,35 @@ import re
 import shlex
 import subprocess
 import tomllib
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import typer
 
 from qproj_scripts import _common, build
+
+# ---------------------------------------------------------------------------
+# Run plan
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class RunPlan:
+    """Fully-resolved description of one ``play`` invocation.
+
+    Captures everything both the local exec path and the remote psync
+    relay need to know, so dispatch reduces to picking an executor.
+    """
+
+    target_path: Path
+    build_argv: list[str]
+    build_env: dict[str, str]
+    assets: Path | None
+    env_vars: str
+    cmd_args: str
+    mode: Literal["local", "remote"]
 
 # ---------------------------------------------------------------------------
 # Remote (SSH / psync) mode helpers
@@ -112,6 +136,105 @@ def _default_package_name() -> str:
 # ---------------------------------------------------------------------------
 
 
+def build_plan(
+    *,
+    example: str | None,
+    package: str | None,
+    build_args: str,
+    env_vars: str,
+    cmd_args: str,
+    assets: Path | None,
+    extras: list[str],
+    environ: Mapping[str, str],
+) -> RunPlan:
+    """Resolve CLI arguments into a fully-determined :class:`RunPlan`.
+
+    Pure modulo :func:`build.cmd` (which is itself a pure argv-builder).
+    Both execution paths consume the returned plan; no caller-side
+    interpretation of the raw flags should remain.
+    """
+    file_set = False
+    file_path: Path | None = None
+    if extras:
+        # First positional extra is treated as the explicit binary path.
+        file_path = Path(extras[0])
+        file_set = True
+
+    cargo_example = ["--example", example] if example else []
+    cargo_package: list[str] = []
+    if package:
+        cargo_package = ["-p", package]
+        if not file_set:
+            file_path = Path(f"target/debug/{package}")
+    elif file_path is None and not example:
+        # Default: derive binary name from the cwd's Cargo.toml so the path
+        # matches what `cargo build` produces.
+        file_path = Path(f"target/debug/{_default_package_name()}")
+
+    build_extra = [*shlex.split(build_args), *cargo_package, *cargo_example]
+    build_argv, build_env = build.cmd(build_extra)
+
+    if example:
+        target_path = Path(f"./target/debug/examples/{example}")
+    else:
+        assert file_path is not None  # set above when no example
+        target_path = file_path
+
+    if assets is not None:
+        resolved_assets: Path | None = assets
+    else:
+        # `just play` is always invoked from the worktree root, so assets
+        # live directly under cwd.
+        assets_path = Path.cwd() / "assets"
+        resolved_assets = assets_path if assets_path.exists() else None
+
+    mode: Literal["local", "remote"] = "remote" if environ.get("SSH_CLIENT") else "local"
+
+    return RunPlan(
+        target_path=target_path,
+        build_argv=build_argv,
+        build_env=build_env,
+        assets=resolved_assets,
+        env_vars=env_vars,
+        cmd_args=cmd_args,
+        mode=mode,
+    )
+
+
+def _exec_remote(plan: RunPlan) -> None:
+    """Patchelf the target, then hand off to ``cubething_psync`` via uvx."""
+    _patch_elf_for_psync(plan.target_path)
+
+    args = [
+        "uvx",
+        "--from",
+        "cubething_psync",
+        "psync",
+        str(plan.target_path),
+    ]
+    if plan.assets is not None:
+        args += ["-A", str(plan.assets)]
+    if plan.env_vars is not None:
+        args += ["-e", plan.env_vars]
+    if plan.cmd_args is not None:
+        args += ["-a", plan.cmd_args]
+
+    _common.run(args)
+
+
+def _exec_local(plan: RunPlan) -> None:
+    """Re-point ``LD_LIBRARY_PATH`` at ``target/debug/deps`` and exec the binary."""
+    deps_dir = Path.cwd() / "target" / "debug" / "deps"
+    existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    run_ld_path = f"{deps_dir}{':' + existing_ld if existing_ld else ''}"
+
+    final = [str(plan.target_path), *shlex.split(plan.cmd_args)]
+
+    _common.log(" ".join(final))
+    os.environ["LD_LIBRARY_PATH"] = run_ld_path
+    os.execvp(final[0], final)
+
+
 def main(
     ctx: typer.Context,
     example: str | None = typer.Option(None, "-x", "--example", help="Cargo --example name."),
@@ -133,69 +256,18 @@ def main(
     ),
 ) -> None:
     """Build, then exec/relay the binary locally or to the psync host."""
-    file_set = False
-    file_path: Path | None = None
-    extras = list(ctx.args)
-    if extras:
-        # First positional extra is treated as the explicit binary path.
-        file_path = Path(extras[0])
-        file_set = True
-
-    cargo_example = ["--example", example] if example else []
-    cargo_package: list[str] = []
-    if package:
-        cargo_package = ["-p", package]
-        if not file_set:
-            file_path = Path(f"target/debug/{package}")
-    elif file_path is None and not example:
-        # Default: derive binary name from the cwd's Cargo.toml so the path
-        # matches what `cargo build` produces.
-        file_path = Path(f"target/debug/{_default_package_name()}")
-
-    # Build via the sibling build verb (in-process).
-    build_extra = [*shlex.split(build_args), *cargo_package, *cargo_example]
-    build_argv, build_env = build.cmd(build_extra)
-    _common.run(build_argv, env_overrides=build_env)
-
-    if example:
-        target_path = Path(f"./target/debug/examples/{example}")
+    plan = build_plan(
+        example=example,
+        package=package,
+        build_args=build_args,
+        env_vars=env_vars,
+        cmd_args=cmd_args,
+        assets=assets,
+        extras=list(ctx.args),
+        environ=os.environ,
+    )
+    _common.run(plan.build_argv, env_overrides=plan.build_env)
+    if plan.mode == "remote":
+        _exec_remote(plan)
     else:
-        assert file_path is not None  # set above when no example
-        target_path = file_path
-
-    args = [
-        "uvx",
-        "--from",
-        "cubething_psync",
-        "psync",
-        str(target_path),
-    ]
-    if assets is not None:
-        args += ["-A", str(assets)]
-    else:
-        # `just play` is always invoked from the worktree root, so assets
-        # live directly under cwd.
-        assets_path = Path.cwd() / "assets"
-        if assets_path.exists():
-            args += ["-A", str(assets_path)]
-
-    if env_vars is not None:
-        args += ["-e", env_vars]
-    if cmd_args is not None:
-        args += ["-a", cmd_args]
-
-    if os.environ.get("SSH_CLIENT"):
-        _patch_elf_for_psync(target_path)
-        _common.run(args)
-        return
-
-    # Local exec path.
-    deps_dir = Path.cwd() / "target" / "debug" / "deps"
-    existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
-    run_ld_path = f"{deps_dir}{':' + existing_ld if existing_ld else ''}"
-
-    final = [str(target_path), *shlex.split(cmd_args)]
-
-    _common.log(" ".join(final))
-    os.environ["LD_LIBRARY_PATH"] = run_ld_path
-    os.execvp(final[0], final)
+        _exec_local(plan)
