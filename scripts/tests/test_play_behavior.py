@@ -112,8 +112,13 @@ def _install_mocks(
     return captured
 
 
-def _invoke(app: typer.Typer, args: list[str]):
+def _invoke(app: typer.Typer, args: list[str], monkeypatch: pytest.MonkeyPatch):
     runner = CliRunner()
+    # ``play`` recovers the ``--`` passthrough boundary from ``sys.argv``
+    # because Click strips ``--`` from ``ctx.args``. Synthesize a plausible
+    # argv so the production codepath is exercised deterministically and
+    # doesn't pick up phantom ``--`` tokens from pytest's own argv.
+    monkeypatch.setattr("sys.argv", ["qproj-scripts", "play", *args])
     return runner.invoke(app, ["play", *args], catch_exceptions=True)
 
 
@@ -135,7 +140,7 @@ def test_local_default_invokes_build_then_execs_target_debug_package_name(
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
     app = _make_app()
-    _invoke(app, [])
+    _invoke(app, [], monkeypatch)
 
     # Build invocation went through with the default `-F dylib` build_args.
     assert captured["runs"], "expected at least one _common.run (the build)"
@@ -159,7 +164,7 @@ def test_local_default_does_not_set_bevy_asset_root(
     monkeypatch.delenv("BEVY_ASSET_ROOT", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), [])
+    _invoke(_make_app(), [], monkeypatch)
 
     _, argv, env = captured["execvpe"][0]
     assert "-A" not in argv
@@ -192,7 +197,7 @@ def test_local_with_explicit_minus_A_warns_and_does_not_set_bevy_asset_root(
     explicit = tmp_path / "some_assets"
     explicit.mkdir()
 
-    _invoke(_make_app(), ["-A", str(explicit)])
+    _invoke(_make_app(), ["-A", str(explicit)], monkeypatch)
 
     assert captured["execvpe"], "expected os.execvpe to be invoked"
     _, argv, env = captured["execvpe"][0]
@@ -211,7 +216,7 @@ def test_local_default_sets_cargo_manifest_dir_to_cwd(
     monkeypatch.delenv("CARGO_MANIFEST_DIR", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), [])
+    _invoke(_make_app(), [], monkeypatch)
 
     _, _, env = captured["execvpe"][0]
     assert env["CARGO_MANIFEST_DIR"] == str(tmp_path.resolve())
@@ -236,7 +241,7 @@ def test_local_with_env_flag_warns(
 
     monkeypatch.setattr(play._common, "log", capturing_log)
 
-    _invoke(_make_app(), ["-e", "FOO=bar"])
+    _invoke(_make_app(), ["-e", "FOO=bar"], monkeypatch)
 
     assert captured["execvpe"], "expected os.execvpe to be invoked"
     _, _, env = captured["execvpe"][0]
@@ -252,7 +257,7 @@ def test_local_with_package_flag_uses_target_debug_package(
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), ["-p", "foo"])
+    _invoke(_make_app(), ["-p", "foo"], monkeypatch)
 
     assert Path(_exec_argv0(captured)) == Path("target/debug/foo")
 
@@ -264,7 +269,7 @@ def test_local_with_example_flag_uses_examples_subdir(
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), ["-x", "mygame"])
+    _invoke(_make_app(), ["-x", "mygame"], monkeypatch)
 
     assert Path(_exec_argv0(captured)) == Path("target/debug/examples/mygame")
 
@@ -276,7 +281,7 @@ def test_local_with_positional_binary_path_overrides_default(
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), ["custom/bin/path"])
+    _invoke(_make_app(), ["custom/bin/path"], monkeypatch)
 
     assert Path(_exec_argv0(captured)) == Path("custom/bin/path")
 
@@ -289,7 +294,7 @@ def test_local_ld_library_path_includes_target_debug_deps(
     monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), [])
+    _invoke(_make_app(), [], monkeypatch)
 
     _, _, env_snapshot = captured["execvpe"][0]
     ld = env_snapshot["LD_LIBRARY_PATH"]
@@ -314,7 +319,7 @@ def test_remote_mode_runs_patchelf_and_rsync_and_psync(
     _remote_env(monkeypatch)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), [])
+    _invoke(_make_app(), [], monkeypatch)
 
     # First run is the build; subsequent runs are patchelf*/rsync/psync.
     argvs = [argv for argv, _env in captured["runs"]]
@@ -351,7 +356,7 @@ def test_remote_mode_forwards_minus_A_to_psync(
     _remote_env(monkeypatch)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), ["-A", "/assets/dir"])
+    _invoke(_make_app(), ["-A", "/assets/dir"], monkeypatch)
 
     psync_calls = [
         argv for argv, _env in captured["runs"] if argv[:2] == ["uvx", "--from"] and "psync" in argv
@@ -372,7 +377,7 @@ def test_remote_mode_still_autodetects_assets_when_minus_A_absent(
     _remote_env(monkeypatch)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), [])
+    _invoke(_make_app(), [], monkeypatch)
 
     psync_calls = [
         argv for argv, _env in captured["runs"] if argv[:2] == ["uvx", "--from"] and "psync" in argv
@@ -407,7 +412,7 @@ def test_auto_mode_without_psync_server_ip_picks_local(
     monkeypatch.delenv("PSYNC_SERVER_IP", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), [])
+    _invoke(_make_app(), [], monkeypatch)
 
     assert captured["execvpe"], "expected local exec path"
     # No remote-mode shell-outs should have been recorded.
@@ -424,7 +429,7 @@ def test_explicit_mode_local_forces_local_even_with_full_remote_env(
     _remote_env(monkeypatch)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), ["--mode", "local"])
+    _invoke(_make_app(), ["--mode", "local"], monkeypatch)
 
     assert captured["execvpe"], "expected local exec path under --mode local"
     for argv, _env in captured["runs"][1:]:
@@ -441,7 +446,7 @@ def test_explicit_mode_remote_forces_remote_without_ssh_client(
     monkeypatch.setenv("PSYNC_SERVER_IP", "10.0.0.5")
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), ["--mode", "remote"])
+    _invoke(_make_app(), ["--mode", "remote"], monkeypatch)
 
     argvs = [argv for argv, _env in captured["runs"]]
     assert any(a[:2] == ["patchelf", "--set-interpreter"] for a in argvs)
@@ -461,7 +466,7 @@ def test_invalid_mode_value_errors(
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    result = _invoke(_make_app(), ["--mode", "bogus"])
+    result = _invoke(_make_app(), ["--mode", "bogus"], monkeypatch)
 
     assert result.exit_code != 0
     combined = (result.output or "") + (
@@ -482,9 +487,161 @@ def test_default_package_name_raises_typer_bad_parameter_in_virtual_workspace(
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    result = _invoke(_make_app(), [])
+    result = _invoke(_make_app(), [], monkeypatch)
 
     assert result.exit_code != 0
     # The typer.BadParameter message should mention [package].name.
     combined = (result.output or "") + ("" if result.exception is None else str(result.exception))
     assert "[package].name" in combined or "package" in combined.lower()
+
+
+# ---------------------------------------------------------------------------
+# ``--`` passthrough + ``-a`` deprecation
+# ---------------------------------------------------------------------------
+
+
+def _capture_warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    warnings: list[str] = []
+    real_log = play._common.log
+
+    def capturing_log(msg: str, level=None) -> None:
+        if level == "warn":
+            warnings.append(msg)
+        real_log(msg, level=level)
+
+    monkeypatch.setattr(play._common, "log", capturing_log)
+    return warnings
+
+
+def test_local_dashdash_passthrough_appended_to_argv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), ["--", "--flag", "value", "pos"], monkeypatch)
+
+    _, argv, _env = captured["execvpe"][0]
+    assert argv[1:] == ["--flag", "value", "pos"]
+
+
+def test_local_dashdash_after_positional_binary_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), ["custom/bin", "--", "--flag"], monkeypatch)
+
+    argv0, argv, _env = captured["execvpe"][0]
+    assert Path(argv0) == Path("custom/bin")
+    assert argv[1:] == ["--flag"]
+
+
+def test_local_legacy_dasha_still_works_with_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+    warnings = _capture_warnings(monkeypatch)
+
+    _invoke(_make_app(), ["-a", "--legacy --flag"], monkeypatch)
+
+    _, argv, _env = captured["execvpe"][0]
+    assert argv[1:] == ["--legacy", "--flag"]
+    assert any("deprecated" in w and "-a" in w for w in warnings), warnings
+
+
+def test_local_dasha_and_passthrough_both_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+    warnings = _capture_warnings(monkeypatch)
+
+    _invoke(_make_app(), ["-a", "--legacy", "--", "--new"], monkeypatch)
+
+    _, argv, _env = captured["execvpe"][0]
+    assert argv[1:] == ["--legacy", "--new"]
+    deprecations = [w for w in warnings if "deprecated" in w]
+    assert len(deprecations) == 1, deprecations
+
+
+def test_remote_dashdash_passthrough_forwarded_to_psync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    _remote_env(monkeypatch)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), ["--", "--flag", "value"], monkeypatch)
+
+    psync_calls = [
+        argv for argv, _env in captured["runs"] if argv[:2] == ["uvx", "--from"] and "psync" in argv
+    ]
+    assert psync_calls, "expected a psync invocation"
+    argv = psync_calls[-1]
+    # ``-a`` carries a shlex-joined string containing both passthrough items.
+    pair_idx = next((i for i in range(len(argv) - 1) if argv[i] == "-a"), None)
+    assert pair_idx is not None, f"expected -a in {argv!r}"
+    payload = argv[pair_idx + 1]
+    assert "--flag" in payload and "value" in payload
+
+
+def test_remote_dasha_and_passthrough_merged_into_psync_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shlex as _shlex
+
+    _setup_cwd(tmp_path, monkeypatch)
+    _remote_env(monkeypatch)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+    warnings = _capture_warnings(monkeypatch)
+
+    _invoke(_make_app(), ["-a", "--legacy", "--", "--new"], monkeypatch)
+
+    psync_calls = [
+        argv for argv, _env in captured["runs"] if argv[:2] == ["uvx", "--from"] and "psync" in argv
+    ]
+    assert psync_calls, "expected a psync invocation"
+    argv = psync_calls[-1]
+    pair_idx = next((i for i in range(len(argv) - 1) if argv[i] == "-a"), None)
+    assert pair_idx is not None, f"expected -a in {argv!r}"
+    assert argv[pair_idx + 1] == _shlex.join(["--legacy", "--new"])
+    deprecations = [w for w in warnings if "deprecated" in w]
+    assert len(deprecations) == 1, deprecations
+
+
+# ---------------------------------------------------------------------------
+# ``_split_passthrough`` unit tests (contract: tail after the FIRST ``--``)
+# ---------------------------------------------------------------------------
+
+
+def test_split_passthrough_empty_argv() -> None:
+    assert play._split_passthrough([]) == []
+
+
+def test_split_passthrough_no_sentinel() -> None:
+    assert play._split_passthrough(["qproj-scripts", "play", "-p", "foo"]) == []
+
+
+def test_split_passthrough_single_sentinel_returns_tail() -> None:
+    assert play._split_passthrough(
+        ["qproj-scripts", "play", "--", "--flag", "value"]
+    ) == ["--flag", "value"]
+
+
+def test_split_passthrough_sentinel_at_end_returns_empty_tail() -> None:
+    assert play._split_passthrough(["qproj-scripts", "play", "--"]) == []
+
+
+def test_split_passthrough_multiple_sentinels_splits_on_first() -> None:
+    # Only the first ``--`` is the boundary; subsequent ones are preserved
+    # verbatim in the returned tail.
+    assert play._split_passthrough(
+        ["qproj-scripts", "play", "--", "--flag", "--", "more"]
+    ) == ["--flag", "--", "more"]

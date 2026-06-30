@@ -18,8 +18,9 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -53,6 +54,9 @@ class RunPlan:
     assets_autodetected: Path | None
     env_vars: str
     cmd_args: str
+    # Tokens supplied after a literal ``--`` on the command line, forwarded
+    # verbatim to the binary's argv. The modern replacement for ``-a``.
+    passthrough: tuple[str, ...]
     mode: Literal["local", "remote"]
 
 # ---------------------------------------------------------------------------
@@ -144,6 +148,10 @@ def _default_package_name() -> str:
 
 _VALID_MODES = frozenset({"auto", "local", "remote"})
 
+_DEPRECATED_ARGS_MSG = (
+    "--args/-a is deprecated; use '-- <args>' passthrough instead"
+)
+
 
 def build_plan(
     *,
@@ -156,6 +164,7 @@ def build_plan(
     extras: list[str],
     environ: Mapping[str, str],
     mode: str = "auto",
+    passthrough: Sequence[str] = (),
 ) -> RunPlan:
     """Resolve CLI arguments into a fully-determined :class:`RunPlan`.
 
@@ -219,6 +228,7 @@ def build_plan(
         assets_autodetected=assets_autodetected,
         env_vars=env_vars,
         cmd_args=cmd_args,
+        passthrough=tuple(passthrough),
         mode=resolved_mode,
     )
 
@@ -238,8 +248,14 @@ def _exec_remote(plan: RunPlan) -> None:
         args += ["-A", str(plan.assets_autodetected)]
     if plan.env_vars is not None:
         args += ["-e", plan.env_vars]
+    if plan.cmd_args:
+        _common.log(_DEPRECATED_ARGS_MSG, level="warn")
+    # psync's ``-a`` accepts a single shell-quoted string (it shlex.splits
+    # internally). Merge the legacy ``-a`` value with the new ``--``
+    # passthrough so both reach the binary.
+    combined = [*shlex.split(plan.cmd_args), *plan.passthrough]
     if plan.cmd_args is not None:
-        args += ["-a", plan.cmd_args]
+        args += ["-a", shlex.join(combined)]
 
     _common.run(args)
 
@@ -267,11 +283,18 @@ def _exec_local(plan: RunPlan) -> None:
             "--env/-e is psync-only and was ignored in local mode", level="warn"
         )
 
+    if plan.cmd_args:
+        _common.log(_DEPRECATED_ARGS_MSG, level="warn")
+
     deps_dir = Path.cwd() / "target" / "debug" / "deps"
     existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
     run_ld_path = f"{deps_dir}{':' + existing_ld if existing_ld else ''}"
 
-    final = [str(plan.target_path), *shlex.split(plan.cmd_args)]
+    final = [
+        str(plan.target_path),
+        *shlex.split(plan.cmd_args),
+        *plan.passthrough,
+    ]
     env = {
         **os.environ,
         "LD_LIBRARY_PATH": run_ld_path,
@@ -280,6 +303,22 @@ def _exec_local(plan: RunPlan) -> None:
 
     _common.log(" ".join(final))
     os.execvpe(final[0], final, env)
+
+
+def _split_passthrough(argv: Sequence[str]) -> list[str]:
+    """Return tokens after the first literal ``--`` in ``argv``.
+
+    Click strips the ``--`` sentinel from ``ctx.args`` under
+    ``ignore_unknown_options=True``, so we recover the boundary from the
+    raw process argv. Returns an empty list when no ``--`` is present.
+    Only the *first* ``--`` is treated as the boundary; subsequent
+    ``--`` tokens are preserved verbatim in the returned tail.
+    """
+    try:
+        i = list(argv).index("--")
+    except ValueError:
+        return []
+    return list(argv[i + 1 :])
 
 
 def main(
@@ -293,7 +332,10 @@ def main(
         "", "-e", "--env", help="Env-var string forwarded to psync (remote mode only)."
     ),
     cmd_args: str = typer.Option(
-        "", "-a", "--args", help="Args appended to the binary invocation."
+        "",
+        "-a",
+        "--args",
+        help="(deprecated; use '-- <args>') Args appended to the binary invocation.",
     ),
     assets: Path | None = typer.Option(
         None,
@@ -313,6 +355,11 @@ def main(
     ),
 ) -> None:
     """Build, then exec/relay the binary locally or to the psync host."""
+    # Click strips ``--`` from ``ctx.args``; reach into ``sys.argv`` to
+    # recover the boundary and split ``ctx.args`` accordingly.
+    post = _split_passthrough(sys.argv)
+    extras_all = list(ctx.args)
+    pre = extras_all[: len(extras_all) - len(post)] if post else extras_all
     plan = build_plan(
         example=example,
         package=package,
@@ -320,9 +367,10 @@ def main(
         env_vars=env_vars,
         cmd_args=cmd_args,
         assets=assets,
-        extras=list(ctx.args),
+        extras=pre,
         environ=os.environ,
         mode=mode,
+        passthrough=post,
     )
     _common.run(plan.build_argv, env_overrides=plan.build_env)
     if plan.mode == "remote":
