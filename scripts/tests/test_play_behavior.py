@@ -222,9 +222,7 @@ def test_local_default_sets_cargo_manifest_dir_to_cwd(
     assert env["CARGO_MANIFEST_DIR"] == str(tmp_path.resolve())
 
 
-def test_local_with_env_flag_warns(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_local_with_env_flag_warns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # ``-e`` is psync-only. Locally we warn and do not apply it.
     _setup_cwd(tmp_path, monkeypatch)
     monkeypatch.delenv("SSH_CLIENT", raising=False)
@@ -453,15 +451,12 @@ def test_explicit_mode_remote_forces_remote_without_ssh_client(
     assert any(a[:2] == ["patchelf", "--set-rpath"] for a in argvs)
     assert any(a and a[0] == "rsync" for a in argvs)
     assert any(
-        a[:2] == ["uvx", "--from"] and "cubething_psync" in a and "psync" in a
-        for a in argvs
+        a[:2] == ["uvx", "--from"] and "cubething_psync" in a and "psync" in a for a in argvs
     )
     assert not captured["execvpe"], "remote path should not call execvpe"
 
 
-def test_invalid_mode_value_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_invalid_mode_value_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _setup_cwd(tmp_path, monkeypatch)
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     _install_mocks(monkeypatch, tmp_path=tmp_path)
@@ -469,9 +464,7 @@ def test_invalid_mode_value_errors(
     result = _invoke(_make_app(), ["--mode", "bogus"], monkeypatch)
 
     assert result.exit_code != 0
-    combined = (result.output or "") + (
-        "" if result.exception is None else str(result.exception)
-    )
+    combined = (result.output or "") + ("" if result.exception is None else str(result.exception))
     assert "auto" in combined and "local" in combined and "remote" in combined
 
 
@@ -643,9 +636,10 @@ def test_split_passthrough_no_sentinel() -> None:
 
 
 def test_split_passthrough_single_sentinel_returns_tail() -> None:
-    assert play._split_passthrough(
-        ["qproj-scripts", "play", "--", "--flag", "value"]
-    ) == ["--flag", "value"]
+    assert play._split_passthrough(["qproj-scripts", "play", "--", "--flag", "value"]) == [
+        "--flag",
+        "value",
+    ]
 
 
 def test_split_passthrough_sentinel_at_end_returns_empty_tail() -> None:
@@ -655,9 +649,11 @@ def test_split_passthrough_sentinel_at_end_returns_empty_tail() -> None:
 def test_split_passthrough_multiple_sentinels_splits_on_first() -> None:
     # Only the first ``--`` is the boundary; subsequent ones are preserved
     # verbatim in the returned tail.
-    assert play._split_passthrough(
-        ["qproj-scripts", "play", "--", "--flag", "--", "more"]
-    ) == ["--flag", "--", "more"]
+    assert play._split_passthrough(["qproj-scripts", "play", "--", "--flag", "--", "more"]) == [
+        "--flag",
+        "--",
+        "more",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -726,14 +722,11 @@ def test_skip_build_in_remote_mode_still_runs_patchelf_and_psync(
     assert any(a[:2] == ["patchelf", "--set-interpreter"] for a in argvs)
     assert any(a and a[0] == "rsync" for a in argvs)
     assert any(
-        a[:2] == ["uvx", "--from"] and "cubething_psync" in a and "psync" in a
-        for a in argvs
+        a[:2] == ["uvx", "--from"] and "cubething_psync" in a and "psync" in a for a in argvs
     )
 
 
-def test_dry_run_wins_over_skip_build(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dry_run_wins_over_skip_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Precedence: --dry-run short-circuits even when --skip-build is also
     # passed. No shell-outs of any kind; only the plan dump fires.
     _setup_cwd(tmp_path, monkeypatch)

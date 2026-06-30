@@ -82,6 +82,7 @@ class RunPlan:
     dry_run: bool = False
     skip_build: bool = False
 
+
 # ---------------------------------------------------------------------------
 # Remote (SSH / psync) mode helpers
 # ---------------------------------------------------------------------------
@@ -121,17 +122,13 @@ def _patch_elf_for_psync(target: Path) -> None:
             raise typer.BadParameter("Could not find libbevy_dylib NEEDED entry in the binary")
     else:
         libbevy = libbevy_match.group(0)
-        _common.run(
-            ["patchelf", "--replace-needed", libbevy, "libbevy_dylib.so", str(target)]
-        )
+        _common.run(["patchelf", "--replace-needed", libbevy, "libbevy_dylib.so", str(target)])
 
     psync_ip = os.environ.get("PSYNC_SERVER_IP")
     if not psync_ip:
         raise typer.BadParameter("PSYNC_SERVER_IP not set; required in SSH mode")
 
-    _common.run(
-        ["patchelf", "--set-interpreter", "/lib64/ld-linux-x86-64.so.2", str(target)]
-    )
+    _common.run(["patchelf", "--set-interpreter", "/lib64/ld-linux-x86-64.so.2", str(target)])
     _common.run(["patchelf", "--set-rpath", "/home/psync/lib", str(target)])
     # sync dependencies - NOT the project itself
     _common.run(
@@ -175,9 +172,7 @@ def _default_package_name() -> str:
 
 _VALID_MODES = frozenset({"auto", "local", "remote"})
 
-_DEPRECATED_ARGS_MSG = (
-    "--args/-a is deprecated; use '-- <args>' passthrough instead"
-)
+_DEPRECATED_ARGS_MSG = "--args/-a is deprecated; use '-- <args>' passthrough instead"
 
 
 def build_plan(
@@ -237,14 +232,10 @@ def build_plan(
         assets_autodetected = assets_path if assets_path.exists() else None
 
     if mode not in _VALID_MODES:
-        raise typer.BadParameter(
-            f"--mode must be one of {sorted(_VALID_MODES)}; got {mode!r}"
-        )
+        raise typer.BadParameter(f"--mode must be one of {sorted(_VALID_MODES)}; got {mode!r}")
     if mode == "auto":
         resolved_mode: Literal["local", "remote"] = (
-            "remote"
-            if environ.get("SSH_CLIENT") and environ.get("PSYNC_SERVER_IP")
-            else "local"
+            "remote" if environ.get("SSH_CLIENT") and environ.get("PSYNC_SERVER_IP") else "local"
         )
     else:
         resolved_mode = mode  # type: ignore[assignment]
@@ -321,13 +312,9 @@ def _exec_local(plan: RunPlan) -> None:
     drop them on the floor.
     """
     if plan.assets_explicit is not None:
-        _common.log(
-            "--assets/-A is psync-only and was ignored in local mode", level="warn"
-        )
+        _common.log("--assets/-A is psync-only and was ignored in local mode", level="warn")
     if plan.env_vars:
-        _common.log(
-            "--env/-e is psync-only and was ignored in local mode", level="warn"
-        )
+        _common.log("--env/-e is psync-only and was ignored in local mode", level="warn")
 
     if plan.cmd_args:
         _common.log(_DEPRECATED_ARGS_MSG, level="warn")
