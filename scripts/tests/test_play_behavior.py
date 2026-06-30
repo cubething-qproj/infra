@@ -513,6 +513,19 @@ def _capture_warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return warnings
 
 
+def _capture_logs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Capture every ``_common.log`` call as ``(level or "", msg)`` pairs."""
+    records: list[tuple[str, str]] = []
+    real_log = play._common.log
+
+    def capturing_log(msg: str, level=None) -> None:
+        records.append((level or "", msg))
+        real_log(msg, level=level)
+
+    monkeypatch.setattr(play._common, "log", capturing_log)
+    return records
+
+
 def test_local_dashdash_passthrough_appended_to_argv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -645,3 +658,100 @@ def test_split_passthrough_multiple_sentinels_splits_on_first() -> None:
     assert play._split_passthrough(
         ["qproj-scripts", "play", "--", "--flag", "--", "more"]
     ) == ["--flag", "--", "more"]
+
+
+# ---------------------------------------------------------------------------
+# --dry-run / --skip-build
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_short_circuits_no_build_no_exec_no_remote_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+    logs = _capture_logs(monkeypatch)
+
+    result = _invoke(_make_app(), ["--dry-run"], monkeypatch)
+
+    assert result.exit_code == 0
+    assert captured["runs"] == []
+    assert captured["execvpe"] == []
+    msgs = [m for _l, m in logs]
+    assert any("mode" in m for m in msgs)
+    assert any("target_path" in m for m in msgs)
+
+
+def test_dry_run_in_remote_mode_does_not_patchelf_or_rsync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    _remote_env(monkeypatch)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    result = _invoke(_make_app(), ["-n"], monkeypatch)
+
+    assert result.exit_code == 0
+    assert captured["runs"] == []
+    assert captured["execvpe"] == []
+
+
+def test_skip_build_does_not_invoke_cargo_but_still_execs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), ["--skip-build"], monkeypatch)
+
+    cargo_calls = [argv for argv, _env in captured["runs"] if argv[:2] == ["cargo", "build"]]
+    assert cargo_calls == [], f"unexpected cargo build: {cargo_calls!r}"
+    assert captured["execvpe"], "expected os.execvpe to be invoked"
+
+
+def test_skip_build_in_remote_mode_still_runs_patchelf_and_psync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    _remote_env(monkeypatch)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), ["-S"], monkeypatch)
+
+    argvs = [argv for argv, _env in captured["runs"]]
+    cargo_calls = [a for a in argvs if a[:2] == ["cargo", "build"]]
+    assert cargo_calls == [], f"unexpected cargo build: {cargo_calls!r}"
+    assert any(a[:2] == ["patchelf", "--set-interpreter"] for a in argvs)
+    assert any(a and a[0] == "rsync" for a in argvs)
+    assert any(
+        a[:2] == ["uvx", "--from"] and "cubething_psync" in a and "psync" in a
+        for a in argvs
+    )
+
+
+def test_dry_run_wins_over_skip_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Precedence: --dry-run short-circuits even when --skip-build is also
+    # passed. No shell-outs of any kind; only the plan dump fires.
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    sub_calls: list[tuple] = []
+    real_subprocess_run = play.subprocess.run
+
+    def tracking_subprocess_run(*args, **kwargs):
+        sub_calls.append((args, kwargs))
+        return real_subprocess_run(*args, **kwargs)
+
+    monkeypatch.setattr(play.subprocess, "run", tracking_subprocess_run)
+
+    result = _invoke(_make_app(), ["--dry-run", "--skip-build"], monkeypatch)
+
+    assert result.exit_code == 0
+    assert captured["runs"] == []
+    assert captured["execvpe"] == []
+    assert sub_calls == []

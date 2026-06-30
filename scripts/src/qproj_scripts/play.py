@@ -1,15 +1,36 @@
-"""Run a freshly-built quell binary, with ergonomic local + remote (psync) modes.
+"""Build a Cargo binary and either exec it locally or relay it to a psync host.
 
-Local mode (no ``$SSH_CLIENT``):
-  Re-adds ``target/debug/deps`` to ``LD_LIBRARY_PATH`` so dylib-feature builds
-  resolve ``libbevy_dylib-<hash>.so`` under nix-shell, then exec's the binary.
-  GPU driver wrapping (nixGL) is the caller's responsibility -- the `play`
-  recipe in the shared justfile prepends a `nix run ...#nixVulkan<Vendor>`.
+Two modes, chosen by ``--mode`` (default ``auto``):
 
-Remote mode (``$SSH_CLIENT`` set):
-  patchelf-rewrites the binary so it loads through the host's standard
-  loader + a /home/psync/lib RPATH, rsyncs libstd / libbevy_dylib to the
-  psync server, and hands off to ``cubething_psync`` via uvx.
+``local``
+    Re-adds ``target/debug/deps`` to ``LD_LIBRARY_PATH`` (so dylib-feature
+    builds resolve ``libbevy_dylib-<hash>.so`` under nix-shell) and injects
+    ``CARGO_MANIFEST_DIR=$PWD`` into the child env so Bevy's ``AssetPlugin``
+    finds the crate's ``assets/`` at runtime, then ``os.execvpe``'s the
+    binary. GPU driver wrapping (nixGL) is the caller's responsibility.
+
+``remote``
+    ``patchelf``-rewrites the binary to load through the host's standard
+    loader + a ``/home/psync/lib`` RPATH, rsyncs libstd and libbevy_dylib to
+    ``$PSYNC_SERVER_IP``, and hands the binary off to ``cubething_psync``
+    via ``uvx``. Picked automatically when both ``SSH_CLIENT`` and
+    ``PSYNC_SERVER_IP`` are set.
+
+``-A``/``--assets`` and ``-e``/``--env`` are psync-only knobs: they are
+forwarded to ``psync`` in remote mode and warn-and-ignored in local mode.
+We do NOT set ``BEVY_ASSET_ROOT``; Bevy locates ``assets/`` via the
+``CARGO_MANIFEST_DIR`` we inject locally, and psync handles the asset
+relay itself in remote mode.
+
+Tokens after a literal ``--`` are forwarded verbatim to the binary's argv
+(or merged into psync's ``-a`` payload). The legacy ``-a``/``--args`` flag
+still works with a deprecation warning.
+
+``--dry-run`` prints the resolved plan and exits. ``--skip-build`` keeps
+everything else intact but skips the ``cargo build`` invocation for fast
+runtime iteration. ``_common.run`` already echoes every shell-out at info
+level before running it, so build/patchelf/rsync/psync invocations are
+visible by default; no extra verbosity flag is needed.
 """
 
 from __future__ import annotations
@@ -58,6 +79,8 @@ class RunPlan:
     # verbatim to the binary's argv. The modern replacement for ``-a``.
     passthrough: tuple[str, ...]
     mode: Literal["local", "remote"]
+    dry_run: bool = False
+    skip_build: bool = False
 
 # ---------------------------------------------------------------------------
 # Remote (SSH / psync) mode helpers
@@ -98,13 +121,17 @@ def _patch_elf_for_psync(target: Path) -> None:
             raise typer.BadParameter("Could not find libbevy_dylib NEEDED entry in the binary")
     else:
         libbevy = libbevy_match.group(0)
-        _common.run(["patchelf", "--replace-needed", libbevy, "libbevy_dylib.so", str(target)])
+        _common.run(
+            ["patchelf", "--replace-needed", libbevy, "libbevy_dylib.so", str(target)]
+        )
 
     psync_ip = os.environ.get("PSYNC_SERVER_IP")
     if not psync_ip:
         raise typer.BadParameter("PSYNC_SERVER_IP not set; required in SSH mode")
 
-    _common.run(["patchelf", "--set-interpreter", "/lib64/ld-linux-x86-64.so.2", str(target)])
+    _common.run(
+        ["patchelf", "--set-interpreter", "/lib64/ld-linux-x86-64.so.2", str(target)]
+    )
     _common.run(["patchelf", "--set-rpath", "/home/psync/lib", str(target)])
     # sync dependencies - NOT the project itself
     _common.run(
@@ -165,6 +192,8 @@ def build_plan(
     environ: Mapping[str, str],
     mode: str = "auto",
     passthrough: Sequence[str] = (),
+    dry_run: bool = False,
+    skip_build: bool = False,
 ) -> RunPlan:
     """Resolve CLI arguments into a fully-determined :class:`RunPlan`.
 
@@ -230,7 +259,24 @@ def build_plan(
         cmd_args=cmd_args,
         passthrough=tuple(passthrough),
         mode=resolved_mode,
+        dry_run=dry_run,
+        skip_build=skip_build,
     )
+
+
+def _log_plan(plan: RunPlan) -> None:
+    """Emit a human-readable dump of ``plan`` at dry-run log level."""
+    sorted_env = ", ".join(f"{k}={v}" for k, v in sorted(plan.build_env.items()))
+    _common.log("dry-run: resolved plan (no build, no exec, no relay)", level="dry")
+    _common.log(f"  mode:                {plan.mode}", level="dry")
+    _common.log(f"  target_path:         {plan.target_path}", level="dry")
+    _common.log(f"  build_argv:          {' '.join(plan.build_argv)}", level="dry")
+    _common.log(f"  build_env:           {sorted_env}", level="dry")
+    _common.log(f"  assets_explicit:     {plan.assets_explicit}", level="dry")
+    _common.log(f"  assets_autodetected: {plan.assets_autodetected}", level="dry")
+    _common.log(f"  env_vars:            {plan.env_vars!r}", level="dry")
+    _common.log(f"  cmd_args:            {plan.cmd_args!r}", level="dry")
+    _common.log(f"  passthrough:         {list(plan.passthrough)!r}", level="dry")
 
 
 def _exec_remote(plan: RunPlan) -> None:
@@ -301,7 +347,7 @@ def _exec_local(plan: RunPlan) -> None:
         "CARGO_MANIFEST_DIR": str(Path.cwd().resolve()),
     }
 
-    _common.log(" ".join(final))
+    _common.log(" ".join(final), level="info")
     os.execvpe(final[0], final, env)
 
 
@@ -323,10 +369,23 @@ def _split_passthrough(argv: Sequence[str]) -> list[str]:
 
 def main(
     ctx: typer.Context,
-    example: str | None = typer.Option(None, "-x", "--example", help="Cargo --example name."),
-    package: str | None = typer.Option(None, "-p", "--package", help="Cargo -p package."),
+    example: str | None = typer.Option(
+        None,
+        "-x",
+        "--example",
+        help="Run a Cargo example (target/debug/examples/<name>) instead of the default binary.",
+    ),
+    package: str | None = typer.Option(
+        None,
+        "-p",
+        "--package",
+        help="Cargo `-p PACKAGE`. Defaults to `[package].name` from the cwd's Cargo.toml.",
+    ),
     build_args: str = typer.Option(
-        "-F dylib", "-B", "--build-args", help="Extra args forwarded to cargo build."
+        "-F dylib",
+        "-B",
+        "--build-args",
+        help="Extra args forwarded to `cargo build` (shell-split). Default: `-F dylib`.",
     ),
     env_vars: str = typer.Option(
         "", "-e", "--env", help="Env-var string forwarded to psync (remote mode only)."
@@ -341,7 +400,10 @@ def main(
         None,
         "-A",
         "--assets",
-        help="Override the assets directory (default: autodetected).",
+        help=(
+            "Override the assets directory (default: autodetected). "
+            "(psync only \u2014 ignored with a warning in local mode)"
+        ),
     ),
     mode: str = typer.Option(
         "auto",
@@ -353,8 +415,20 @@ def main(
             "handoff)."
         ),
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "-n",
+        "--dry-run",
+        help="Print the resolved plan and exit without building or running anything.",
+    ),
+    skip_build: bool = typer.Option(
+        False,
+        "-S",
+        "--skip-build",
+        help="Skip `cargo build` and reuse the existing target binary.",
+    ),
 ) -> None:
-    """Build, then exec/relay the binary locally or to the psync host."""
+    """Build a Cargo binary and exec it locally or relay it to a psync host."""
     # Click strips ``--`` from ``ctx.args``; reach into ``sys.argv`` to
     # recover the boundary and split ``ctx.args`` accordingly.
     post = _split_passthrough(sys.argv)
@@ -371,8 +445,14 @@ def main(
         environ=os.environ,
         mode=mode,
         passthrough=post,
+        dry_run=dry_run,
+        skip_build=skip_build,
     )
-    _common.run(plan.build_argv, env_overrides=plan.build_env)
+    if plan.dry_run:
+        _log_plan(plan)
+        return
+    if not plan.skip_build:
+        _common.run(plan.build_argv, env_overrides=plan.build_env)
     if plan.mode == "remote":
         _exec_remote(plan)
     else:
