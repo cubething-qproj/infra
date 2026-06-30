@@ -18,6 +18,7 @@ import os
 import re
 import shlex
 import subprocess
+import tomllib
 from pathlib import Path
 
 import typer
@@ -88,6 +89,24 @@ def _patch_elf_for_psync(target: Path) -> None:
     )
 
 
+def _default_package_name() -> str:
+    """Return ``[package].name`` from the cwd's ``Cargo.toml``."""
+    cargo_toml = Path("Cargo.toml")
+    if not cargo_toml.exists():
+        raise typer.BadParameter(
+            "no Cargo.toml in cwd; pass an explicit binary path or run from a crate root"
+        )
+    with cargo_toml.open("rb") as f:
+        manifest = tomllib.load(f)
+    try:
+        return manifest["package"]["name"]
+    except KeyError as e:
+        raise typer.BadParameter(
+            "Cargo.toml has no [package].name (virtual workspace?); pass -p PACKAGE "
+            "or an explicit binary path"
+        ) from e
+
+
 # ---------------------------------------------------------------------------
 # Main command
 # ---------------------------------------------------------------------------
@@ -115,8 +134,7 @@ def main(
 ) -> None:
     """Build, then exec/relay the binary locally or to the psync host."""
     file_set = False
-    # TODO: Read this in from Cargo.toml
-    file_path = Path("target/debug/quell")
+    file_path: Path | None = None
     extras = list(ctx.args)
     if extras:
         # First positional extra is treated as the explicit binary path.
@@ -129,13 +147,21 @@ def main(
         cargo_package = ["-p", package]
         if not file_set:
             file_path = Path(f"target/debug/{package}")
+    elif file_path is None and not example:
+        # Default: derive binary name from the cwd's Cargo.toml so the path
+        # matches what `cargo build` produces.
+        file_path = Path(f"target/debug/{_default_package_name()}")
 
     # Build via the sibling build verb (in-process).
     build_extra = [*shlex.split(build_args), *cargo_package, *cargo_example]
     build_argv, build_env = build.cmd(build_extra)
     _common.run(build_argv, env_overrides=build_env)
 
-    target_path = Path(f"./target/debug/examples/{example}") if example else file_path
+    if example:
+        target_path = Path(f"./target/debug/examples/{example}")
+    else:
+        assert file_path is not None  # set above when no example
+        target_path = file_path
 
     args = [
         "uvx",
