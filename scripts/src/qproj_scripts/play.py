@@ -44,7 +44,13 @@ class RunPlan:
     target_path: Path
     build_argv: list[str]
     build_env: dict[str, str]
-    assets: Path | None
+    # User-supplied ``-A`` value, verbatim. Only consulted by the local
+    # executor to warn that the flag is psync-only (``-A`` is silently
+    # ignored in local mode otherwise).
+    assets_explicit: Path | None
+    # ``assets_explicit`` falling back to ``cwd/assets`` when that exists.
+    # Only the remote executor reads this, to forward ``-A`` to psync.
+    assets_autodetected: Path | None
     env_vars: str
     cmd_args: str
     mode: Literal["local", "remote"]
@@ -181,12 +187,12 @@ def build_plan(
         target_path = file_path
 
     if assets is not None:
-        resolved_assets: Path | None = assets
+        assets_autodetected: Path | None = assets
     else:
         # `just play` is always invoked from the worktree root, so assets
         # live directly under cwd.
         assets_path = Path.cwd() / "assets"
-        resolved_assets = assets_path if assets_path.exists() else None
+        assets_autodetected = assets_path if assets_path.exists() else None
 
     mode: Literal["local", "remote"] = "remote" if environ.get("SSH_CLIENT") else "local"
 
@@ -194,7 +200,8 @@ def build_plan(
         target_path=target_path,
         build_argv=build_argv,
         build_env=build_env,
-        assets=resolved_assets,
+        assets_explicit=assets,
+        assets_autodetected=assets_autodetected,
         env_vars=env_vars,
         cmd_args=cmd_args,
         mode=mode,
@@ -212,8 +219,8 @@ def _exec_remote(plan: RunPlan) -> None:
         "psync",
         str(plan.target_path),
     ]
-    if plan.assets is not None:
-        args += ["-A", str(plan.assets)]
+    if plan.assets_autodetected is not None:
+        args += ["-A", str(plan.assets_autodetected)]
     if plan.env_vars is not None:
         args += ["-e", plan.env_vars]
     if plan.cmd_args is not None:
@@ -223,16 +230,41 @@ def _exec_remote(plan: RunPlan) -> None:
 
 
 def _exec_local(plan: RunPlan) -> None:
-    """Re-point ``LD_LIBRARY_PATH`` at ``target/debug/deps`` and exec the binary."""
+    """Re-point ``LD_LIBRARY_PATH`` at ``target/debug/deps`` and exec the binary.
+
+    Bevy's ``AssetPlugin`` reads ``CARGO_MANIFEST_DIR`` from the process
+    env at runtime (via ``std::env::var``) to locate the assets root.
+    ``cargo run`` and ``dx serve`` both inject it at spawn time; a bare
+    ``os.execvpe`` does not, which is why ``just play`` used to load
+    assets out of ``target/debug/assets`` instead of the crate root.
+    Set it explicitly to the cwd so the local exec matches ``cargo run``.
+
+    ``-A`` / ``-e`` are psync-only knobs; passing them through to a local
+    exec is not meaningful, so we warn and ignore rather than silently
+    drop them on the floor.
+    """
+    if plan.assets_explicit is not None:
+        _common.log(
+            "--assets/-A is psync-only and was ignored in local mode", level="warn"
+        )
+    if plan.env_vars:
+        _common.log(
+            "--env/-e is psync-only and was ignored in local mode", level="warn"
+        )
+
     deps_dir = Path.cwd() / "target" / "debug" / "deps"
     existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
     run_ld_path = f"{deps_dir}{':' + existing_ld if existing_ld else ''}"
 
     final = [str(plan.target_path), *shlex.split(plan.cmd_args)]
+    env = {
+        **os.environ,
+        "LD_LIBRARY_PATH": run_ld_path,
+        "CARGO_MANIFEST_DIR": str(Path.cwd().resolve()),
+    }
 
     _common.log(" ".join(final))
-    os.environ["LD_LIBRARY_PATH"] = run_ld_path
-    os.execvp(final[0], final)
+    os.execvpe(final[0], final, env)
 
 
 def main(

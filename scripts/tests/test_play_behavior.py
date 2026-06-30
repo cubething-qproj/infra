@@ -2,13 +2,8 @@
 
 These tests capture the *current* observable shell-out shape of the
 ``play`` verb so that subsequent refactors are guarded. They never
-invoke ``cargo``, ``rsync``, ``patchelf``, ``readelf``, or ``execvp``
+invoke ``cargo``, ``rsync``, ``patchelf``, ``readelf``, or ``execvpe``
 for real: every shell-out boundary is monkeypatched.
-
-Two tests (``test_local_default_does_not_pass_minus_A_to_binary`` and
-``test_local_with_explicit_minus_A_currently_dropped``) intentionally
-encode a present-day bug where local mode silently drops ``-A``. They
-are expected to be *inverted*, not deleted, when that bug is fixed.
 """
 
 from __future__ import annotations
@@ -83,7 +78,7 @@ def _install_mocks(
     """Stub every shell-out boundary in ``play`` and return a capture dict."""
     captured: dict[str, list] = {
         "runs": [],  # list[tuple[list[str], dict | None]] from _common.run
-        "execvp": [],  # list[tuple[str, list[str], dict[str, str]]] -- argv0, argv, env snapshot
+        "execvpe": [],  # list[tuple[str, list[str], dict[str, str]]]
     }
 
     def fake_build_cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
@@ -93,15 +88,8 @@ def _install_mocks(
         captured["runs"].append((list(cmd), env_overrides))
         return None
 
-    def fake_execvp(argv0, argv):
-        # Snapshot LD_LIBRARY_PATH at the moment of exec, since play.py mutates
-        # os.environ directly right before the call.
-        import os as _os
-
-        env_snapshot = {
-            "LD_LIBRARY_PATH": _os.environ.get("LD_LIBRARY_PATH", ""),
-        }
-        captured["execvp"].append((argv0, list(argv), env_snapshot))
+    def fake_execvpe(argv0, argv, env):
+        captured["execvpe"].append((argv0, list(argv), dict(env)))
         raise _ExecvpSentinel(0)
 
     class _ReadelfResult:
@@ -118,7 +106,7 @@ def _install_mocks(
     monkeypatch.setattr(play.build, "cmd", fake_build_cmd)
     monkeypatch.setattr(play._common, "run", fake_common_run)
     monkeypatch.setattr(play._common, "rustc_sysroot", lambda: str(sysroot))
-    monkeypatch.setattr(play.os, "execvp", fake_execvp)
+    monkeypatch.setattr(play.os, "execvpe", fake_execvpe)
     monkeypatch.setattr(play.subprocess, "run", fake_subprocess_run)
 
     return captured
@@ -130,8 +118,8 @@ def _invoke(app: typer.Typer, args: list[str]):
 
 
 def _exec_argv0(captured: dict[str, list]) -> str:
-    assert captured["execvp"], "expected os.execvp to be invoked"
-    return captured["execvp"][0][0]
+    assert captured["execvpe"], "expected os.execvpe to be invoked"
+    return captured["execvpe"][0][0]
 
 
 # ---------------------------------------------------------------------------
@@ -160,12 +148,12 @@ def test_local_default_invokes_build_then_execs_target_debug_package_name(
     assert Path(_exec_argv0(captured)) == Path("target/debug/demo")
 
 
-def test_local_default_does_not_pass_minus_A_to_binary(
+def test_local_default_does_not_set_bevy_asset_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # NOTE: documents *current* (buggy) behavior of the local path silently
-    # dropping the assets override. This test is expected to be UPDATED (not
-    # deleted) when the local path is taught to forward -A / BEVY_ASSET_ROOT.
+    # Local mode with no ``-A`` must leave ``BEVY_ASSET_ROOT`` untouched in
+    # the child env -- Bevy's compile-time default wins. ``-A`` is never an
+    # argv flag on the binary; we only ever set it via env.
     _setup_cwd(tmp_path, monkeypatch)
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     monkeypatch.delenv("BEVY_ASSET_ROOT", raising=False)
@@ -173,33 +161,88 @@ def test_local_default_does_not_pass_minus_A_to_binary(
 
     _invoke(_make_app(), [])
 
-    _, argv, env_snapshot = captured["execvp"][0]
+    _, argv, env = captured["execvpe"][0]
     assert "-A" not in argv
-    # BEVY_ASSET_ROOT was never set into the env on the way to execvp.
+    assert "BEVY_ASSET_ROOT" not in env
     import os as _os
 
     assert "BEVY_ASSET_ROOT" not in _os.environ
-    assert "BEVY_ASSET_ROOT" not in env_snapshot
 
 
-def test_local_with_explicit_minus_A_currently_dropped(
+def test_local_with_explicit_minus_A_warns_and_does_not_set_bevy_asset_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # NOTE: locks current bug -- `-A` on the CLI in local mode is silently
-    # dropped. Will be inverted when the local path forwards assets.
+    # ``-A`` is psync-only. In local mode we must warn and ignore: no
+    # ``BEVY_ASSET_ROOT`` in the child env, no ``-A`` on the argv.
     _setup_cwd(tmp_path, monkeypatch)
     monkeypatch.delenv("SSH_CLIENT", raising=False)
     monkeypatch.delenv("BEVY_ASSET_ROOT", raising=False)
     captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
 
-    _invoke(_make_app(), ["-A", "/tmp/whatever"])
+    warnings: list[str] = []
+    real_log = play._common.log
 
-    _, argv, env_snapshot = captured["execvp"][0]
+    def capturing_log(msg: str, level=None) -> None:
+        if level == "warn":
+            warnings.append(msg)
+        real_log(msg, level=level)
+
+    monkeypatch.setattr(play._common, "log", capturing_log)
+
+    explicit = tmp_path / "some_assets"
+    explicit.mkdir()
+
+    _invoke(_make_app(), ["-A", str(explicit)])
+
+    assert captured["execvpe"], "expected os.execvpe to be invoked"
+    _, argv, env = captured["execvpe"][0]
     assert "-A" not in argv
-    import os as _os
+    assert "BEVY_ASSET_ROOT" not in env
+    assert any("psync-only" in w and "--assets" in w for w in warnings), warnings
 
-    assert "BEVY_ASSET_ROOT" not in _os.environ
-    assert "BEVY_ASSET_ROOT" not in env_snapshot
+
+def test_local_default_sets_cargo_manifest_dir_to_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Bevy reads CARGO_MANIFEST_DIR at runtime to locate the assets root;
+    # ``cargo run`` injects it, our local exec must too.
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    monkeypatch.delenv("CARGO_MANIFEST_DIR", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), [])
+
+    _, _, env = captured["execvpe"][0]
+    assert env["CARGO_MANIFEST_DIR"] == str(tmp_path.resolve())
+
+
+def test_local_with_env_flag_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ``-e`` is psync-only. Locally we warn and do not apply it.
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    monkeypatch.delenv("FOO", raising=False)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    warnings: list[str] = []
+    real_log = play._common.log
+
+    def capturing_log(msg: str, level=None) -> None:
+        if level == "warn":
+            warnings.append(msg)
+        real_log(msg, level=level)
+
+    monkeypatch.setattr(play._common, "log", capturing_log)
+
+    _invoke(_make_app(), ["-e", "FOO=bar"])
+
+    assert captured["execvpe"], "expected os.execvpe to be invoked"
+    _, _, env = captured["execvpe"][0]
+    assert env.get("FOO") != "bar"
+    assert "FOO=bar" not in env
+    assert any("psync-only" in w and "--env" in w for w in warnings), warnings
 
 
 def test_local_with_package_flag_uses_target_debug_package(
@@ -248,7 +291,7 @@ def test_local_ld_library_path_includes_target_debug_deps(
 
     _invoke(_make_app(), [])
 
-    _, _, env_snapshot = captured["execvp"][0]
+    _, _, env_snapshot = captured["execvpe"][0]
     ld = env_snapshot["LD_LIBRARY_PATH"]
     first = ld.split(":")[0]
     assert Path(first) == tmp_path / "target" / "debug" / "deps"
@@ -318,6 +361,35 @@ def test_remote_mode_forwards_minus_A_to_psync(
     # -A and /assets/dir must appear adjacent.
     found_pair = any(argv[i] == "-A" and argv[i + 1] == "/assets/dir" for i in range(len(argv) - 1))
     assert found_pair, f"expected ['-A', '/assets/dir'] adjacent in {argv!r}"
+
+
+def test_remote_mode_still_autodetects_assets_when_minus_A_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Remote mode keeps the cwd/assets autodetect, unlike local mode --
+    # this asymmetry is deliberate.
+    _setup_cwd(tmp_path, monkeypatch)  # lays down cwd/assets
+    _remote_env(monkeypatch)
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), [])
+
+    psync_calls = [
+        argv for argv, _env in captured["runs"] if argv[:2] == ["uvx", "--from"] and "psync" in argv
+    ]
+    assert psync_calls, "expected a psync invocation"
+    argv = psync_calls[-1]
+    expected = str((tmp_path / "assets").resolve())
+    # The autodetected path is cwd/assets; it may appear as either the
+    # resolved absolute path or as ``Path('assets')`` depending on Path
+    # stringification. Match either by checking the pair contains a path
+    # whose resolved form equals tmp_path/assets.
+    pair_idx = next(
+        (i for i in range(len(argv) - 1) if argv[i] == "-A"),
+        None,
+    )
+    assert pair_idx is not None, f"expected -A in {argv!r}"
+    assert Path(argv[pair_idx + 1]).resolve() == Path(expected)
 
 
 # ---------------------------------------------------------------------------
