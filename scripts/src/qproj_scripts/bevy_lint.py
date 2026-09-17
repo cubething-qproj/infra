@@ -1,7 +1,8 @@
-"""Run ``bevy lint`` with the right sysroot and isolated target dir.
+"""Run ``bevy lint`` with the right sysroot and target-directory policy.
 
 Invokes the ``lint`` subcommand of the ``bevy`` CLI (provided by the upstream
-bevy_cli flake), which dispatches to ``bevy_lint_driver``.
+flake), which dispatches to ``bevy_lint_driver``. Local runs use an isolated
+``target/bevy_lint`` directory; CI uses Cargo's default ``target`` directory.
 
 Sets ``RUSTC_WRAPPER=`` (disables sccache, which conflicts with bevy_lint's
 custom driver) and ``BEVY_LINT_SYSROOT`` to the active toolchain's sysroot.
@@ -20,13 +21,13 @@ def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
     Exposed so :mod:`qproj_scripts.check` can launch ``bevy_lint`` in parallel
     with Clippy without re-entering a Python interpreter.
     """
+    target_args = [] if _common.is_ci() else ["--target-dir=target/bevy_lint"]
     argv = [
         "bevy",
         "lint",
         "--config",
         'profile.dev.codegen-backend="llvm"',
-        "--all-features",
-        "--target-dir=target/bevy_lint",
+        *target_args,
         *extra,
     ]
     env = {
@@ -37,7 +38,7 @@ def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
 
 
 def main(ctx: typer.Context) -> None:
-    """Run ``bevy lint --all-features --target-dir=target/bevy_lint``."""
+    """Run ``bevy lint``, forwarding all arguments unchanged."""
     argv, env = cmd(ctx.args)
     result = _common.run(argv, env_overrides=env, check=False)
     raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

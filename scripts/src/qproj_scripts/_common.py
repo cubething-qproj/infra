@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -13,6 +15,49 @@ import typer
 
 DEFAULT_BRANCH = os.environ.get("DEFAULT_BRANCH", "main")
 DEFAULT_REMOTE = os.environ.get("DEFAULT_REMOTE", "origin")
+
+
+type ExitCode = int
+
+
+@dataclass(frozen=True, slots=True)
+class Invocation:
+    """One external command and its environment overrides."""
+
+    argv: list[str]
+    env_overrides: dict[str, str]
+
+    @classmethod
+    def from_command(cls, command: tuple[list[str], dict[str, str]]) -> Invocation:
+        return cls(*command)
+
+
+def is_ci() -> bool:
+    """Return whether the process is running in CI.
+
+    GitHub Actions exports ``CI=true``. Treat any non-empty value as enabled so
+    local callers can exercise the same behavior with ``CI=1``.
+    """
+    return bool(os.environ.get("CI"))
+
+
+def command_args(explicit: Sequence[str]) -> list[str]:
+    """Combine explicit arguments with a safely encoded CI argument array.
+
+    The reusable workflow sets ``QPROJ_COMMAND_ARGS_JSON`` for one command
+    step at a time. Parsing it here avoids interpolating caller-controlled text
+    into a shell command.
+    """
+    raw = os.environ.get("QPROJ_COMMAND_ARGS_JSON")
+    if raw is None:
+        return list(explicit)
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise typer.BadParameter("QPROJ_COMMAND_ARGS_JSON must be valid JSON") from error
+    if not isinstance(decoded, list) or not all(isinstance(arg, str) for arg in decoded):
+        raise typer.BadParameter("QPROJ_COMMAND_ARGS_JSON must be a JSON array of strings")
+    return [*decoded, *explicit]
 
 
 def asset(path: str | Path) -> Traversable:

@@ -1,16 +1,13 @@
-"""Run Clippy and ``bevy_lint`` concurrently.
+"""Run Clippy and ``bevy_lint`` using local or CI execution policy.
 
-Both linters use isolated target dirs (``target/clippy`` and
-``target/bevy_lint``) so they can build in parallel without contention.
-Exits non-zero if either linter fails.
+Locally the linters run concurrently with isolated target directories. In CI
+they run sequentially and share Cargo's default ``target`` directory with
+builds and tests, reducing peak disk usage.
 
-Multiple packages may be named; they are forwarded as repeated ``-p PKG``
-pairs to both linters (matching cargo's own ``-p`` semantics). With no
-packages, both linters run once over the whole workspace.
-
-When ``LOCAL=1`` is set, each named package instead spawns its own pair of
-clippy + bevy_lint invocations with ``--manifest-dir=<pkg>``, running all
-of them concurrently.
+Arguments are forwarded unchanged to both linters. For backward compatibility,
+a list containing only positional values is treated as package shorthand and
+expanded to repeated ``-p PKG`` pairs. With ``LOCAL=1``, that shorthand keeps
+the existing per-package ``--manifest-dir=<pkg>`` fan-out.
 """
 
 from __future__ import annotations
@@ -21,38 +18,57 @@ import subprocess
 import typer
 
 from qproj_scripts import _common, bevy_lint, clippy
+from qproj_scripts._common import ExitCode, Invocation
 
 
-def _spawn(argv: list[str], env_overrides: dict[str, str]) -> subprocess.Popen[bytes]:
-    """Echo ``argv`` and ``Popen`` it with ``env_overrides`` layered on os.environ."""
-    _common.log(" ".join(argv), None)
-    env = {**os.environ, **env_overrides} if env_overrides else None
-    return subprocess.Popen(argv, env=env)
+def _spawn(invocation: Invocation) -> subprocess.Popen[bytes]:
+    """Echo and spawn an invocation with its overrides layered on ``os.environ``."""
+    _common.log(" ".join(invocation.argv), None)
+    env = {**os.environ, **invocation.env_overrides} if invocation.env_overrides else None
+    return subprocess.Popen(invocation.argv, env=env)
 
 
-def main(
-    packages: list[str] | None = typer.Argument(
-        None,
-        metavar="[PACKAGE...]",
-        help="Cargo packages to scope both linters to. Repeatable; forwarded as -p PKG pairs.",
-    ),
-) -> None:
-    """Run Clippy and bevy_lint in parallel; non-zero if either fails."""
-    pkgs = packages or []
+def _invocations(extra: list[str]) -> list[Invocation]:
+    """Construct linter invocations while retaining positional package shorthand."""
+    positional_packages = bool(extra) and all(not arg.startswith("-") for arg in extra)
+    if os.environ.get("LOCAL") == "1" and positional_packages:
+        invocations: list[Invocation] = []
+        for package in extra:
+            manifest_arg = f"--manifest-dir={package}"
+            invocations.append(Invocation.from_command(clippy.cmd([manifest_arg])))
+            invocations.append(Invocation.from_command(bevy_lint.cmd([manifest_arg])))
+        return invocations
 
-    invocations: list[tuple[list[str], dict[str, str]]] = []
-    if os.environ.get("LOCAL") == "1" and pkgs:
-        for pkg in pkgs:
-            manifest_arg = f"--manifest-dir={pkg}"
-            invocations.append(clippy.cmd([manifest_arg]))
-            invocations.append(bevy_lint.cmd([manifest_arg]))
+    forwarded: list[str] = []
+    if positional_packages:
+        for package in extra:
+            forwarded.extend(["-p", package])
     else:
-        pkg_args: list[str] = []
-        for pkg in pkgs:
-            pkg_args.extend(["-p", pkg])
-        invocations.append(clippy.cmd(pkg_args))
-        invocations.append(bevy_lint.cmd(pkg_args))
+        forwarded = extra
+    return [
+        Invocation.from_command(clippy.cmd(forwarded)),
+        Invocation.from_command(bevy_lint.cmd(forwarded)),
+    ]
 
-    procs = [_spawn(argv, env) for argv, env in invocations]
-    rcs = [p.wait() for p in procs]
+
+def _run_sequential(invocations: list[Invocation]) -> list[ExitCode]:
+    """Run each invocation to completion in order and return its exit code."""
+    return [
+        _common.run(
+            invocation.argv,
+            env_overrides=invocation.env_overrides or None,
+            check=False,
+        ).returncode  # pyright: ignore[reportOptionalMemberAccess]
+        for invocation in invocations
+    ]
+
+
+def main(ctx: typer.Context) -> None:
+    """Run both linters; sequentially in CI and concurrently otherwise."""
+    invocations = _invocations(_common.command_args(ctx.args))
+    if _common.is_ci():
+        rcs = _run_sequential(invocations)
+    else:
+        procs = [_spawn(invocation) for invocation in invocations]
+        rcs = [proc.wait() for proc in procs]
     raise typer.Exit(max(rcs) if any(rcs) else 0)

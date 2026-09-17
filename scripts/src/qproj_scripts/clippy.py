@@ -1,7 +1,7 @@
-"""Run Clippy with the workspace's standard flags.
+"""Run Clippy with the workspace's standard target-directory policy.
 
-Pins ``--target-dir=target/clippy`` so Clippy's incremental cache does not
-collide with plain ``cargo build`` or ``bevy_lint``.
+Local runs use ``target/clippy`` so Clippy can run alongside ``bevy_lint``.
+CI uses Cargo's default ``target`` directory to minimize peak disk usage.
 """
 
 from __future__ import annotations
@@ -17,12 +17,12 @@ def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
     Exposed so :mod:`qproj_scripts.check` can launch Clippy in parallel with
     ``bevy_lint`` without re-entering a Python interpreter.
     """
-    argv = ["cargo", "clippy", "--all-features", "--target-dir=target/clippy", *extra]
-    return argv, {}
+    target_args = [] if _common.is_ci() else ["--target-dir=target/clippy"]
+    return ["cargo", "clippy", *target_args, *extra], {}
 
 
 def main(ctx: typer.Context) -> None:
-    """Run ``cargo clippy --all-features --target-dir=target/clippy``."""
+    """Run Clippy, forwarding all arguments to Cargo unchanged."""
     argv, env = cmd(ctx.args)
     result = _common.run(argv, env_overrides=env or None, check=False)
     raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]
