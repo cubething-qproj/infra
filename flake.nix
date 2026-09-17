@@ -15,7 +15,12 @@
     # binary includes the `lint` subcommand (which in turn dispatches to
     # bevy_lint_driver). Consuming it directly removes the need to vendor
     # the bevy_cli source and rebuild bevy_lint from scratch via crane.
-    bevy_cli.url = "github:TheBevyFlock/bevy_cli";
+    bevy_cli = {
+      url = "github:TheBevyFlock/bevy_cli";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.rust-overlay.follows = "rust-overlay";
+      inputs.flake-utils.follows = "flake-utils";
+    };
   };
 
   # GPU driver wrapping (formerly via nixGL inputs + a dedicated `nvidia`
@@ -40,14 +45,17 @@
         # upstream flake's `bevy_lint_driver` is built against this exact
         # nightly; running it under any other rustc ABI fails to load.
         mkRustToolchain = {
+          profile ? "default",
           extensions,
           targets,
         }:
-          pkgs.rust-bin.nightly."2026-04-16".default.override {
+          (builtins.getAttr profile pkgs.rust-bin.nightly."2026-04-16").override {
             inherit extensions targets;
           };
 
-        rustToolchain = mkRustToolchain {
+        # The default profile includes rustdoc, local HTML documentation, and
+        # rustfmt in addition to the explicitly requested developer tools.
+        rustToolchainDev = mkRustToolchain {
           extensions = [
             "rustc-codegen-cranelift-preview"
             "rustc-dev"
@@ -62,16 +70,26 @@
           ];
         };
 
-        # Trimmed toolchain for CI. Drops IDE-only extensions
-        # (rust-analyzer, rust-src), the rustc-dev internals extension
-        # (only needed to compile rustc plugins ourselves; bevy_lint_driver
-        # ships prebuilt), and the windows cross-compile target.
-        # cranelift stays: .cargo/config.toml pins it as the dev codegen-backend.
+        # Pipeline toolchain: minimal profile avoids rust-docs and rustfmt.
+        # Cranelift remains because the shared Cargo dev profile selects it;
+        # Clippy is required by qproj-scripts check.
         rustToolchainCi = mkRustToolchain {
+          profile = "minimal";
           extensions = [
             "rustc-codegen-cranelift-preview"
-            "llvm-tools-preview"
             "clippy"
+          ];
+          targets = [
+            "x86_64-unknown-linux-gnu"
+          ];
+        };
+
+        # Coverage explicitly selects LLVM and runs on a separate runner. It
+        # needs LLVM's instrumentation tools, but not Clippy or Cranelift.
+        rustToolchainCoverage = mkRustToolchain {
+          profile = "minimal";
+          extensions = [
+            "llvm-tools-preview"
           ];
           targets = [
             "x86_64-unknown-linux-gnu"
@@ -82,7 +100,7 @@
         # entry point; the package bundles the lint driver alongside it.
         bevy-cli = bevy_cli.packages.${system}.default;
 
-        linuxDeps = pkgs.lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+        linuxDeps = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [
           alsa-lib
           udev
           wayland
@@ -91,18 +109,18 @@
         ]);
 
         mkShell = {
-          toolchain ? rustToolchain,
+          toolchain ? rustToolchainDev,
+          includeBevyCli ? true,
           extraPackages ? [],
+          extraShellHook ? "",
         }:
           pkgs.mkShell {
             nativeBuildInputs = [pkgs.pkg-config];
 
             buildInputs =
               linuxDeps
-              ++ [
-                toolchain
-                bevy-cli
-              ];
+              ++ [toolchain]
+              ++ pkgs.lib.optional includeBevyCli bevy-cli;
 
             packages = extraPackages;
 
@@ -119,6 +137,8 @@
               if [ -f ".env.local" ]; then
                 source ".env.local"
               fi
+
+              ${extraShellHook}
             '';
 
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath linuxDeps;
@@ -131,6 +151,14 @@
           clang
           cargo-nextest
           uv
+          python314
+        ];
+
+        coveragePackages = with pkgs; [
+          mold
+          clang
+          cargo-nextest
+          cargo-llvm-cov
         ];
 
         # Full developer toolbox.
@@ -149,10 +177,19 @@
         devShells.ci = mkShell {
           toolchain = rustToolchainCi;
           extraPackages = ciPackages;
+          extraShellHook = ''
+            export CARGO_PROFILE_DEV_DEBUG=0
+            export UV_PYTHON="${pkgs.python314}/bin/python3"
+            export UV_PYTHON_DOWNLOADS=never
+          '';
         };
         devShells.ci-coverage = mkShell {
-          toolchain = rustToolchainCi;
-          extraPackages = ciPackages ++ [pkgs.cargo-llvm-cov];
+          toolchain = rustToolchainCoverage;
+          includeBevyCli = false;
+          extraPackages = coveragePackages;
+          extraShellHook = ''
+            export CARGO_PROFILE_DEV_DEBUG=0
+          '';
         };
       }
     );

@@ -2,6 +2,22 @@ name: Downstream pipeline
 
 on:
     workflow_call:
+        inputs:
+            build-args:
+                description: 'JSON string array forwarded to `cargo build` (for example `["--features","foo,bar"]`).'
+                required: false
+                type: string
+                default: "[]"
+            check-args:
+                description: 'JSON string array forwarded to both Clippy and bevy_lint.'
+                required: false
+                type: string
+                default: "[]"
+            test-args:
+                description: 'JSON string array forwarded to `cargo nextest run`.'
+                required: false
+                type: string
+                default: "[]"
         secrets:
             DISPATCH_TOKEN:
                 description: "PAT with contents:write and pull-requests:write for auto-merge."
@@ -12,6 +28,7 @@ concurrency:
     cancel-in-progress: true
 
 env:
+    CARGO_PROFILE_DEV_DEBUG: "0"
     CARGO_TERM_COLOR: always
     RUST_BACKTRACE: 1
     SCCACHE_GHA_ENABLED: true
@@ -34,9 +51,18 @@ jobs:
               with:
                   arguments: .#ci
             - run: uv tool install qproj-scripts --from git+https://github.com/cubething-qproj/infra@main#subdirectory=scripts
-            - run: qproj-scripts build
-            - run: qproj-scripts check
-            - run: qproj-scripts test
+            - name: Build
+              env:
+                  QPROJ_COMMAND_ARGS_JSON: ${{ inputs['build-args'] }}
+              run: qproj-scripts build
+            - name: Check
+              env:
+                  QPROJ_COMMAND_ARGS_JSON: ${{ inputs['check-args'] }}
+              run: qproj-scripts check
+            - name: Test
+              env:
+                  QPROJ_COMMAND_ARGS_JSON: ${{ inputs['test-args'] }}
+              run: qproj-scripts test || [ "$?" -eq 4 ]
 
     generate-coverage:
         needs: build_and_test

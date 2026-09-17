@@ -22,6 +22,6 @@ def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
 
 def main(ctx: typer.Context) -> None:
     """Run ``cargo build`` with any forwarded arguments."""
-    argv, env = cmd(ctx.args)
+    argv, env = cmd(_common.command_args(ctx.args))
     result = _common.run(argv, env_overrides=env, check=False)
     raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

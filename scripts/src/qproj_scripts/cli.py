@@ -64,7 +64,12 @@ def _register(name: str, fn, *, ctx, help: str) -> None:
 
 _register("build", build.main, ctx=_PASSTHROUGH, help="Build the workspace.")
 _register("play", play.main, ctx=_PASSTHROUGH, help="Build and run a quell binary.")
-_register("check", check.main, ctx=_STRICT, help="Run Clippy and bevy_lint concurrently.")
+_register(
+    "check",
+    check.main,
+    ctx=_PASSTHROUGH,
+    help="Run Clippy and bevy_lint (sequentially in CI, concurrently locally).",
+)
 _register("clippy", clippy.main, ctx=_PASSTHROUGH, help="Run Clippy.")
 _register("bevy-lint", bevy_lint.main, ctx=_PASSTHROUGH, help="Run bevy_lint.")
 _register("deny", deny.main, ctx=_STRICT, help="Audit dependencies via cargo deny.")
@@ -103,7 +108,7 @@ _register(
     help="Run Clippy with --fix to apply autofixable suggestions.",
 )
 def fix(ctx: typer.Context) -> None:
-    """Run ``cargo clippy --fix --all-features --target-dir=target/clippy``."""
+    """Run ``cargo clippy --fix`` with the standard target-directory policy."""
     argv, env = clippy.cmd(["--fix", *ctx.args])
     result = _common.run(argv, env_overrides=env or None, check=False)
     raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]
