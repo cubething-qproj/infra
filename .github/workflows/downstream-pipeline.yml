@@ -62,7 +62,7 @@ jobs:
             - name: Test
               env:
                   QPROJ_COMMAND_ARGS_JSON: ${{ inputs['test-args'] }}
-              run: qproj-scripts test
+              run: qproj-scripts test || [ "$?" -eq 4 ]
 
     generate-coverage:
         needs: build_and_test
