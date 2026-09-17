@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -14,8 +13,6 @@ import typer
 
 DEFAULT_BRANCH = os.environ.get("DEFAULT_BRANCH", "main")
 DEFAULT_REMOTE = os.environ.get("DEFAULT_REMOTE", "origin")
-VALID_PREFIX = ["fix", "feat", "doc", "tests", "release"]
-PREFIX_RE = re.compile(rf"^({'|'.join(VALID_PREFIX)})/")
 
 
 def asset(path: str | Path) -> Traversable:

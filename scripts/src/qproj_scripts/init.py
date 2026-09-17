@@ -1,21 +1,8 @@
-"""Initialize a new downstream repo under ``cubething-qproj/<name>``.
+"""Initialize an ordinary downstream checkout under ``cubething-qproj/<name>``.
 
-Optionally creates the GitHub remote via ``gh repo create``, then
-bootstraps the canonical bare + worktree layout in-place: ``.bare`` is
-``git init``'d directly in the final repo dir, a ``main`` worktree is
-added with an orphan branch, an initial commit (project scaffold + shared
-config files) is pushed to ``origin``, and finally :func:`sync._sync_repo`
-runs idempotently over the result to materialize ``active/`` and the
-config symlinks.
-
-Project scaffolding (enabled with ``--project``, default on) lays down a
-minimal Cargo crate styled after the existing downstreams (q_term,
-q_screens, ...): ``Cargo.toml`` + ``src/lib.rs`` or ``src/main.rs`` +
-LICENSE files + shared per-worktree files declared in ``sync-files.json``
-(deny.toml, flake.nix, ci.yml, ...) + ``patch_cargo`` injecting the
-shared workspace/profile/lints baseline.
-
-Defaults to dry-run; pass ``-x`` / ``--execute`` to actually mutate.
+Optionally creates the GitHub remote, scaffolds a Cargo project, commits
+and pushes it, then installs the shared local project configuration.
+Defaults to dry-run; pass ``-x`` / ``--execute`` to mutate.
 """
 
 from __future__ import annotations
@@ -42,7 +29,7 @@ _TEMPLATED = frozenset({"Cargo.toml", "README.md"})
 def _default_infra_dir() -> Path:
     home = Path.home()
     base_dir = Path(os.environ.get("BASE_DIR", str(home / "repos")))
-    return base_dir / ORG / "infra" / "active"
+    return base_dir / ORG / "infra"
 
 
 def _write(path: Path, content: str, *, dry: bool) -> None:
@@ -82,7 +69,7 @@ def _render_project(name: str, dest: Path, infra_dir: Path, *, bin_: bool, dry: 
     for lic in ("LICENSE-MIT.txt", "LICENSE-APACHE.txt"):
         _copy(infra_dir / lic, dest / lic, dry=dry)
 
-    # 3. Apply sync-files.json (shared per-worktree files: deny.toml,
+    # 3. Apply sync-files.json (shared checkout files: deny.toml,
     #    flake.nix, ci.yml, .cargo/config.toml, justfile, nextest.toml).
     sync_files = json.loads((infra_dir / "sync-files.json").read_text())
     for entry in sync_files:
@@ -106,62 +93,22 @@ def _bootstrap_in_place(
     bin_: bool,
     dry: bool,
 ) -> None:
-    """Initialize ``.bare`` and ``main/`` in their final location, commit, push.
-
-    Leaves the repo in the canonical layout with ``origin/main`` populated,
-    so the subsequent :func:`_sync_repo` call is idempotent (fetch +
-    symlinks + ``active/`` worktree).
-    """
-    bare = repo_dir / ".bare"
-    wt = repo_dir / DEFAULT_BRANCH
+    """Initialize an ordinary checkout in its final location, commit, and push."""
     level = "dry" if dry else "info"
-
-    log(f"mkdir -p {repo_dir}", level)
-    if not dry:
-        repo_dir.mkdir(parents=True, exist_ok=True)
-
-    run(["git", "init", "--bare", "-b", DEFAULT_BRANCH, str(bare)], dry=dry)
-    run(["git", "-C", str(bare), "remote", "add", DEFAULT_REMOTE, remote_url], dry=dry)
-    run(
-        [
-            "git",
-            "-C",
-            str(bare),
-            "config",
-            f"remote.{DEFAULT_REMOTE}.fetch",
-            f"+refs/heads/*:refs/remotes/{DEFAULT_REMOTE}/*",
-        ],
-        dry=dry,
-    )
-    run(["git", "-C", str(bare), "config", "worktree.useRelativePaths", "true"], dry=dry)
-    write_file(repo_dir / ".git", "gitdir: ./.bare\n", dry=dry)
-
-    run(
-        [
-            "git",
-            "-C",
-            str(bare),
-            "worktree",
-            "add",
-            "--orphan",
-            "-b",
-            DEFAULT_BRANCH,
-            str(wt),
-        ],
-        dry=dry,
-    )
+    run(["git", "init", "-b", DEFAULT_BRANCH, str(repo_dir)], dry=dry)
+    run(["git", "-C", str(repo_dir), "remote", "add", DEFAULT_REMOTE, remote_url], dry=dry)
 
     if project:
-        _render_project(name, wt, infra_dir, bin_=bin_, dry=dry)
+        _render_project(name, repo_dir, infra_dir, bin_=bin_, dry=dry)
     else:
-        readme = wt / "README.md"
+        readme = repo_dir / "README.md"
         log(f"write {readme}", level=level)
         if not dry:
             readme.write_text(f"# {name}\n")
 
-    run(["git", "-C", str(wt), "add", "."], dry=dry)
-    run(["git", "-C", str(wt), "commit", "-m", "chore: initial commit"], dry=dry)
-    run(["git", "-C", str(wt), "push", "-u", DEFAULT_REMOTE, DEFAULT_BRANCH], dry=dry)
+    run(["git", "-C", str(repo_dir), "add", "."], dry=dry)
+    run(["git", "-C", str(repo_dir), "commit", "-m", "chore: initial commit"], dry=dry)
+    run(["git", "-C", str(repo_dir), "push", "-u", DEFAULT_REMOTE, DEFAULT_BRANCH], dry=dry)
 
 
 def main(
@@ -182,7 +129,7 @@ def main(
     project: bool = typer.Option(
         True,
         "--project/--no-project",
-        help="Scaffold a Cargo project in main/ before the initial commit.",
+        help="Scaffold a Cargo project before the initial commit.",
     ),
     bin_: bool = typer.Option(
         False,
@@ -194,7 +141,7 @@ def main(
         "--infra-dir",
         help="Path to the infra working tree (source of sync-files.json, "
         "LICENSE files, Cargo.workspace.toml). "
-        "Defaults to $BASE_DIR/cubething-qproj/infra/active.",
+        "Defaults to $BASE_DIR/cubething-qproj/infra.",
     ),
     execute: bool = typer.Option(
         False,
@@ -270,7 +217,7 @@ def main(
     log("writing .envrc", "info")
     write_file(org_dir / ".envrc", envrc(), dry=dry)
 
-    # Create the remote + initialize layout in-place + push so origin/main exists.
+    # Create the remote and initialize the ordinary checkout in place.
     if create_remote:
         visibility = "--private" if private else "--public"
         run(["gh", "repo", "create", full, visibility], dry=dry)
@@ -290,8 +237,8 @@ def main(
             level="info",
         )
 
-    # Canonical bare + worktree + active + config symlinks (idempotent).
-    _sync_repo(full, base_dir, config_dir, dry=dry, clobber=clobber)
+    # Fetch the checkout and install local project configuration (idempotent).
+    _sync_repo(full, base_dir, config_dir, dry=dry)
 
     # Register in downstream-repos.json so future `sync` runs pick it up.
     new_repos = [*downstream_repos, full]
@@ -301,4 +248,5 @@ def main(
             p.write_text(json.dumps(new_repos, indent=2) + "\n")
 
     log(f"initialized {full} at {repo_dir}", level="info")
-    log(f"next: cd {repo_dir}/active && just sync-scripts && just build", level="info")
+    if project:
+        log(f"next: cd {repo_dir} && just sync-scripts && just build", level="info")

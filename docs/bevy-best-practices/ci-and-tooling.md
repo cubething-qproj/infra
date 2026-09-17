@@ -29,7 +29,7 @@ lint configuration that bare `cargo` won't apply.
 The scripts these recipes wrap live in `infra/main/scripts/` and are
 [uv](https://docs.astral.sh/uv/) single-file scripts (PEP 723 inline
 metadata + `#!/usr/bin/env -S uv run --script`). If you need to extend
-a recipe, edit the script (in the `infra` worktree) — not the recipe.
+a recipe, edit the script (in the `infra` checkout) — not the recipe.
 Each script honours `--help` via [typer](https://typer.tiangolo.com/).
 
 ### Why not `cargo run -p ci` / xtask?

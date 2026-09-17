@@ -6,29 +6,26 @@ reference see [`docs/bevy-best-practices/`](docs/bevy-best-practices/).
 
 ## Repo layout
 
-Work is done inside a _metarepo,_ a workspace assembled from independent crates,
-each living in its own bare-plus-worktree git layout.
+Each crate is an ordinary Git checkout under `~/repos/cubething-qproj/`. Only
+one branch is checked out per repository at a time.
 
-Each `<crate>/active` is a symlink into a worktree. The AGENTS.md in qproj_scripts/assets has a brief overview of branch naming conventions.
-
-
-Inside any per-crate worktree, branch names follow:
+Branch names follow:
 
 ```
-main/                              # always-checked-out
+main                               # default branch
 feat/<change>                      # new features
 feat/<initiative>/<sub-aspect>     # multi-PR initiatives, when designed
 fix/<change>                       # bug fixes
-docs/<change>                      # docs-only
-ci/<change>                        # CI-only
+chore/<change>                     # minor revisions
+automation/<change>                # automated change repairs
+doc/<change>                       # docs-only
 tests/<change>                     # test-only
 ```
 
-Create a new worktree from the bare clone for substantial work via `just add
-<name>`, then target it for editing with `just target <name>`.
+Use ordinary Git commands to create and switch branches.
 
-Your daily commands are `just` recipes. Run `just` with no arguments for the
-full list.
+Daily build and validation commands are available as `just` recipes. Run
+`just` with no arguments for the full list.
 
 ## Guidelines
 

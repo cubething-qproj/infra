@@ -226,7 +226,7 @@ def build_plan(
     if assets is not None:
         assets_autodetected: Path | None = assets
     else:
-        # `just play` is always invoked from the worktree root, so assets
+        # `just play` is always invoked from the checkout root, so assets
         # live directly under cwd.
         assets_path = Path.cwd() / "assets"
         assets_autodetected = assets_path if assets_path.exists() else None

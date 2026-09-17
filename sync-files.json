@@ -4,5 +4,5 @@
     { "src": "config/deny.toml", "dst": "deny.toml" },
     { "src": "config/nextest.toml", "dst": "nextest.toml" },
     { "src": "config/config.toml", "dst": ".cargo/config.toml" },
-    { "src": "config/worktree.justfile", "dst": "justfile" }
+    { "src": "config/justfile", "dst": "justfile" }
 ]
