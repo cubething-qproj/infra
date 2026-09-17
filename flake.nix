@@ -43,7 +43,7 @@
           extensions,
           targets,
         }:
-          pkgs.rust-bin.nightly."2026-03-05".default.override {
+          pkgs.rust-bin.nightly."2026-04-16".default.override {
             inherit extensions targets;
           };
 
