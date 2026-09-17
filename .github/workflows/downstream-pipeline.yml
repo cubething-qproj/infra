@@ -7,6 +7,10 @@ on:
                 description: "PAT with contents:write and pull-requests:write for auto-merge."
                 required: true
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
 env:
     CARGO_TERM_COLOR: always
     RUST_BACKTRACE: 1
