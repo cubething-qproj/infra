@@ -22,7 +22,6 @@ import typer
 
 from qproj_scripts import (
     _common,
-    add,
     bevy_lint,
     build,
     check,
@@ -33,10 +32,8 @@ from qproj_scripts import (
     init,
     patch_cargo,
     play,
-    prune,
     ra_check,
     sync,
-    target,
     test,
 )
 
@@ -84,17 +81,14 @@ _register(
     "sync",
     sync.main,
     ctx=_STRICT,
-    help="Sync the local clone-tree of workflow consumer repos.",
+    help="Sync ordinary local checkouts of workflow consumer repos.",
 )
-_register("target", target.main, ctx=_STRICT, help="Check out a branch in active/.")
-_register("add", add.main, ctx=_STRICT, help="Create a new worktree off origin/$DEFAULT_BRANCH.")
 _register(
     "init",
     init.main,
     ctx=_STRICT,
     help="Initialize a new downstream repo under cubething-qproj/.",
 )
-_register("prune", prune.main, ctx=_STRICT, help="Clean up all already-merged worktrees.")
 _register(
     "patch-cargo",
     patch_cargo.main,

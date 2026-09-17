@@ -1,10 +1,8 @@
-"""Sync the local clone-tree of consumer repos.
+"""Sync the local checkout of each consumer repository.
 
-For each repo listed in ``assets/downstream-repos.json``,
-ensure ``$BASE_DIR/<repo>`` exists with the canonical bare + worktree layout:
-
-Defaults to dry-run; pass ``-x`` / ``--execute`` to actually mutate. Use
-``--clobber`` to allow resetting a worktree that has uncommitted changes.
+For each repository listed in ``assets/downstream-repos.json``, ensure an
+ordinary Git checkout exists at ``$BASE_DIR/<repo>`` and refresh its remote
+refs. Defaults to dry-run; pass ``-x`` / ``--execute`` to mutate.
 """
 
 from __future__ import annotations
@@ -30,16 +28,12 @@ def write_file(path: Path, content: str, *, dry: bool) -> None:
 
 
 def envrc() -> str:
-    # GPU driver wrapping is handled per-invocation by `just play`
-    # (which prepends `nix run github:nix-community/nixGL#$NIXGL`), so
-    # the devshell itself is pure -- no `--impure`, no per-GPU variant.
-    # Override the wrapper for a host by exporting `NIXGL` in .env.local.
     return (
         'export GH_TOKEN=$(gh auth token 2>/dev/null || echo "")\n'
         "export NIXPKGS_ALLOW_UNFREE=1\n"
         "export LOCAL=1\n"
         "\n"
-        "use flake path:infra/active\n"
+        "use flake path:infra\n"
     )
 
 
@@ -56,146 +50,66 @@ def _symlink(target: Path, link: Path, *, dry: bool) -> None:
     link.symlink_to(target)
 
 
-# Top-level paths inside <repo>/ owned by per-worktree sync rather than
-# by the shared .config/ overlay. Any symlink at these paths would
-# shadow the real per-worktree file inside active/, so we unlink them
-# defensively on every sync.
-_STALE_REPO_ROOT_LINKS = ("Cargo.toml", ".cargo", "nextest.toml")
+def _tracked(repo_dir: Path, path: Path) -> bool:
+    result = subprocess.run(
+        ["git", "-C", str(repo_dir), "ls-files", "--error-unmatch", str(path)],
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
 
 
-def _prune_stale(repo_dir: Path, *, dry: bool) -> None:
-    """Drop layout artifacts that conflict with the canonical layout.
-
-    ``<repo>/active`` must be a real worktree, not a symlink:
-    ``Path.is_dir()`` follows symlinks, so a stale symlink here would
-    hide a missing worktree and skip its creation.
-    """
-    level = "dry" if dry else "info"
-    active = repo_dir / "active"
-    if active.is_symlink():
-        log(f"removing stale symlink {active}", level=level)
-        if not dry:
-            active.unlink()
-
-    for name in _STALE_REPO_ROOT_LINKS:
-        stale = repo_dir / name
-        if stale.is_symlink():
-            log(f"removing stale symlink {stale}", level=level)
-            if not dry:
-                stale.unlink()
+def _exclude(repo_dir: Path, path: str, *, dry: bool) -> None:
+    exclude = repo_dir / ".git" / "info" / "exclude"
+    entry = f"/{path}\n"
+    if exclude.is_file() and entry in exclude.read_text():
+        return
+    log(f"exclude {path} in {repo_dir}", level="dry" if dry else "info")
+    if not dry:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        with exclude.open("a") as file:
+            file.write(entry)
 
 
 def _sync_config_links(repo_dir: Path, config_dir: Path, *, dry: bool) -> None:
-    """Symlink the shared .config/ overlay into ``repo_dir``.
-
-    Top-level entries are linked directly. ``.zed/`` is special-cased
-    so per-repo Zed tweaks can coexist with the shared settings.json:
-    a real ``<repo>/.zed/`` dir is created and each child file is
-    symlinked individually rather than the whole directory.
-    """
+    """Install untracked local project configuration in an ordinary checkout."""
     for entry in asset(".config").iterdir():
-        name = entry.name
-        if name == ".zed":
-            zed_dir = repo_dir / ".zed"
-            if not dry:
-                zed_dir.mkdir(parents=True, exist_ok=True)
+        if entry.name == ".zed":
             for child in entry.iterdir():
-                _symlink(config_dir / ".zed" / child.name, zed_dir / child.name, dry=dry)
-        else:
-            _symlink(config_dir / name, repo_dir / name, dry=dry)
+                relative = Path(".zed") / child.name
+                if not _tracked(repo_dir, relative):
+                    _symlink(config_dir / relative, repo_dir / relative, dry=dry)
+                    _exclude(repo_dir, str(relative), dry=dry)
+        elif not _tracked(repo_dir, Path(entry.name)):
+            _symlink(config_dir / entry.name, repo_dir / entry.name, dry=dry)
+            _exclude(repo_dir, entry.name, dry=dry)
 
 
-def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool, clobber: bool) -> None:
+def _sync_repo(repo: str, base_dir: Path, config_dir: Path, *, dry: bool) -> None:
     repo_dir = base_dir / repo
     typer.echo(f"\n=== {repo} ===")
 
-    if repo_dir.is_dir():
-        log(f"{repo_dir} exists", "info")
+    if repo_dir.exists():
+        if not (repo_dir / ".git").is_dir():
+            log(f"{repo_dir} is not an ordinary Git checkout", level="error")
+            if not dry:
+                raise typer.Exit(code=1)
+            return
+        log(f"{repo_dir} exists", level="info")
     else:
-        log(f"creating {repo_dir}", "dry" if dry else "info")
-        if not dry:
-            repo_dir.mkdir(parents=True, exist_ok=True)
-
-    log("syncing .bare", "info")
-    bare = repo_dir / ".bare"
-    if not bare.is_dir():
-        run(["git", "clone", "--bare", f"https://github.com/{repo}", str(bare)], dry=dry)
-    else:
-        log(".bare exists", "info")
-
-    run(
-        [
-            "git",
-            "-C",
-            str(bare),
-            "config",
-            f"remote.{DEFAULT_REMOTE}.fetch",
-            f"+refs/heads/*:refs/remotes/{DEFAULT_REMOTE}/*",
-        ],
-        dry=dry,
-    )
-
-    write_file(repo_dir / ".git", "gitdir: ./.bare\n", dry=dry)
-    run(["git", "-C", str(bare), "fetch", "--all", "--prune"], dry=dry)
-    run(["git", "-C", str(bare), "config", "worktree.useRelativePaths", "true"], dry=dry)
-    run(["git", "-C", str(bare), "worktree", "repair"], dry=dry)
-
-    _prune_stale(repo_dir, dry=dry)
-
-    log(f"syncing {DEFAULT_BRANCH}", "info")
-    wt = repo_dir / DEFAULT_BRANCH
-    if not wt.is_dir():
-        log(f"{wt} missing", "info")
-        run(["git", "-C", str(bare), "worktree", "add", str(wt), DEFAULT_BRANCH], dry=dry)
-    else:
-        log(f"{wt} exists", "info")
-
-    log("syncing active worktree", "info")
-    active = repo_dir / "active"
-    if not active.is_dir():
-        log(f"{active} missing", "info")
-        # Detached HEAD at main's tip: the main/ worktree already holds
-        # the `main` branch ref, and git refuses to check out the same
-        # branch in two worktrees. `qproj target <branch>` is the
-        # supported way to put active/ onto an actual branch.
         run(
             [
                 "git",
-                "-C",
-                str(bare),
-                "worktree",
-                "add",
-                "--detach",
-                str(active),
+                "clone",
+                "--branch",
                 DEFAULT_BRANCH,
+                f"https://github.com/{repo}",
+                str(repo_dir),
             ],
             dry=dry,
         )
-    else:
-        log(f"{active} exists", "info")
 
-    status = ""
-    if not dry:
-        status = subprocess.run(
-            ["git", "-C", str(wt), "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            check=False,
-        ).stdout.strip()
-    if status:
-        if clobber:
-            log(f"{wt} has uncommitted changes. Clobbering...", "warn")
-        else:
-            log(f"{wt} has uncommitted changes. Re-run with --clobber to overwrite.", "error")
-            if not dry:
-                raise typer.Exit(code=1)
-    else:
-        log(f"{wt} clean", "info")
-
-    run(["git", "-C", str(wt), "reset", "--hard", f"{DEFAULT_REMOTE}/{DEFAULT_BRANCH}"], dry=dry)
-    run(["git", "-C", str(wt), "clean", "-fd"], dry=dry)
-
-    log("Symlinking config files", "info")
+    run(["git", "-C", str(repo_dir), "fetch", DEFAULT_REMOTE, "--prune"], dry=dry)
     _sync_config_links(repo_dir, config_dir, dry=dry)
 
 
@@ -203,24 +117,19 @@ def main(
     execute: bool = typer.Option(
         False, "-x", "--execute", help="Actually run mutating commands (default is dry-run)."
     ),
-    clobber: bool = typer.Option(
-        False, "--clobber", help="Hard-reset worktrees even with uncommitted changes."
-    ),
 ) -> None:
-    """Sync the local clone-tree of workflow consumer repos."""
+    """Sync the local checkout of each workflow consumer repository."""
     home = Path.home()
     base_dir = Path(os.environ.get("BASE_DIR", str(home / "repos")))
-    downstream_repos = asset("downstream-repos.json").read_text("utf8")
-    downstream_repos = json.loads(downstream_repos)
+    downstream_repos = json.loads(asset("downstream-repos.json").read_text("utf8"))
     dry = not execute
 
-    all_repos: list[str] = [str(r) for r in downstream_repos] + ["cubething-qproj/infra"]
-
-    log("syncing shared config files", "info")
+    all_repos: list[str] = [str(repo) for repo in downstream_repos] + ["cubething-qproj/infra"]
     org_dir = base_dir / "cubething-qproj"
     config_dir = org_dir / ".config"
-
     level = "dry" if dry else "info"
+
+    log("syncing shared config files", "info")
     with as_file(asset(".config")) as src:
         log(f"rm -rf {config_dir}", level)
         if not dry:
@@ -229,9 +138,7 @@ def main(
         if not dry:
             shutil.copytree(src, config_dir)
 
-    log("writing .envrc", "info")
-    envrc_content = envrc()
-    write_file(org_dir / ".envrc", envrc_content, dry=dry)
+    write_file(org_dir / ".envrc", envrc(), dry=dry)
 
     for repo in all_repos:
-        _sync_repo(repo, base_dir, config_dir, dry=dry, clobber=clobber)
+        _sync_repo(repo, base_dir, config_dir, dry=dry)

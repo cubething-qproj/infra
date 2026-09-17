@@ -9,9 +9,8 @@ pairs to both linters (matching cargo's own ``-p`` semantics). With no
 packages, both linters run once over the whole workspace.
 
 When ``LOCAL=1`` is set, each named package instead spawns its own pair of
-clippy + bevy_lint invocations with ``--manifest-dir=<pkg>/active``,
-running all of them concurrently. (Preserved as-is from the pre-refactor
-script; cargo does not natively accept ``--manifest-dir``.)
+clippy + bevy_lint invocations with ``--manifest-dir=<pkg>``, running all
+of them concurrently.
 """
 
 from __future__ import annotations
@@ -44,7 +43,7 @@ def main(
     invocations: list[tuple[list[str], dict[str, str]]] = []
     if os.environ.get("LOCAL") == "1" and pkgs:
         for pkg in pkgs:
-            manifest_arg = f"--manifest-dir={pkg}/active"
+            manifest_arg = f"--manifest-dir={pkg}"
             invocations.append(clippy.cmd([manifest_arg]))
             invocations.append(bevy_lint.cmd([manifest_arg]))
     else:

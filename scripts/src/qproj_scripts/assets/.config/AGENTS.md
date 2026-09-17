@@ -14,14 +14,10 @@ curl -fsSL https://api.github.com/repos/cubething-qproj/infra/contents/docs/bevy
 
 ## Directory structure
 
-This is a "metarepo." It is not a git repository, but a project-level working
-tree.
+Each repository is an ordinary Git checkout. Only one working tree exists per
+repository; use ordinary Git commands to switch branches in place.
 
-Git repositories in this directory are typically checked out as a bare +
-worktree layout, but some less active repos are plain git clones.
-
-Hidden directories are not part of the project. They include personal
-configuration.
+Generated local configuration may be excluded through `.git/info/exclude`.
 
 ## Governance
 
@@ -30,24 +26,20 @@ governance files. Governance files include AGENTS.md, AGENTS.local.md,
 README.md, CLAUDE.md, CURSOR.md, .github/copilot-instructions, CONTRIBUTING.md,
 HACKING.md, etc. Failure to read these files is a critical error.
 
-## Worktrees
+## Branches
 
-Worktrees should have one of the following prefixes:
+Branches should have one of the following prefixes:
 
 - feat/ # new features
 - fix/ # bug fixes
+- chore/ # minor revisions
+- automation/ # automated change repairs
 - release/ # release branches - rare!
 - doc/ # documentation
 - tests/ # testing - new tests, test edits, etc.
 
-The exception is the default branch, `main`. you should not modify this branch,
-it is for reference only. Fetch and pull each time you reference it, so it
-always stays up to date.
-
-All worktrees should have relative git dirs. If you need to update git, then do so.
-
-Use the justfile for worktree management. Do NOT retarget 'active' unless
-specifically asked to do so.
+The exception is the default branch, `main`; do not modify it directly. Fetch
+before referencing it so it stays up to date.
 
 ## When to read what (reference material)
 

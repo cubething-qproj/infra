@@ -1,19 +1,9 @@
 {
-  "file_scan_exclusions": [
-    "**/.bare",
-    "**/.direnv",
-    "**/target",
-    "main",
-    "feat",
-    "fix",
-    "doc",
-    "tests",
-    "release"
-  ],
+  "file_scan_exclusions": ["**/.direnv", "**/target"],
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {
-        "linkedProjects": ["./active/Cargo.toml"],
+        "linkedProjects": ["./Cargo.toml"],
         "cargo": { "features": "all" },
         "check": {
           "overrideCommand": ["just", "ra-check"],

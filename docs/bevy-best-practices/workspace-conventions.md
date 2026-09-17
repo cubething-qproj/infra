@@ -10,7 +10,7 @@
 
 This workspace uses **nightly Rust**, pinned to whatever `bevy_lint`
 requires (currently `nightly-2026-01-22`). Updated when `bevy_lint`
-updates. Pinned via `rust-toolchain.toml` at the metarepo root.
+updates. Pinned via `rust-toolchain.toml` at the repository root.
 
 There is **no MSRV** (`rust-version` is not declared). MSRV is
 meaningless under a nightly pin.
