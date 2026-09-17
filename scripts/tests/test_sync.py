@@ -26,6 +26,8 @@ def test_sync_repo_preserves_ordinary_checkout(
 
     subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True)
     subprocess.run(["git", "clone", str(remote), str(seed)], check=True)
+    _git(seed, "config", "user.name", "Test User")
+    _git(seed, "config", "user.email", "test@example.com")
     (seed / "README.md").write_text("demo\n")
     _git(seed, "add", "README.md")
     _git(seed, "-c", "commit.gpgsign=false", "commit", "-m", "chore: seed")
