@@ -1,8 +1,9 @@
 """Run ``bevy lint`` with the right sysroot and target-directory policy.
 
 Invokes the ``lint`` subcommand of the ``bevy`` CLI (provided by the upstream
-flake), which dispatches to ``bevy_lint_driver``. Local runs use an isolated
-``target/bevy_lint`` directory; CI uses Cargo's default ``target`` directory.
+flake), which dispatches to ``bevy_lint_driver``. Local runs set
+``CARGO_TARGET_DIR`` to the organization-level ``target/bevy_lint`` directory;
+CI uses Cargo's default target directory.
 
 Sets ``RUSTC_WRAPPER=`` (disables sccache, which conflicts with bevy_lint's
 custom driver) and ``BEVY_LINT_SYSROOT`` to the active toolchain's sysroot.
@@ -21,19 +22,19 @@ def cmd(extra: list[str]) -> tuple[list[str], dict[str, str]]:
     Exposed so :mod:`qproj_scripts.check` can launch ``bevy_lint`` in parallel
     with Clippy without re-entering a Python interpreter.
     """
-    target_args = [] if _common.is_ci() else ["--target-dir=target/bevy_lint"]
     argv = [
         "bevy",
         "lint",
         "--config",
         'profile.dev.codegen-backend="llvm"',
-        *target_args,
         *extra,
     ]
     env = {
         "RUSTC_WRAPPER": "",
         "BEVY_LINT_SYSROOT": _common.rustc_sysroot(),
     }
+    if not _common.is_ci():
+        env["CARGO_TARGET_DIR"] = str(_common.organization_dir() / "target" / "bevy_lint")
     return argv, env
 
 
