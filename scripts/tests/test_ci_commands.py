@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -56,18 +57,25 @@ def test_local_linters_keep_isolated_targets_without_forcing_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_ci(monkeypatch, False)
+    monkeypatch.setattr(bevy_lint._common, "rustc_sysroot", lambda: "/rust")
+    monkeypatch.setattr(_common, "organization_dir", lambda: Path("/qproj"))
 
-    clippy_argv, _ = clippy.cmd([])
-    bevy_argv, _ = bevy_lint.cmd([])
+    clippy_argv, clippy_env = clippy.cmd([])
+    bevy_argv, bevy_env = bevy_lint.cmd([])
 
-    assert clippy_argv == ["cargo", "clippy", "--target-dir=target/clippy"]
+    assert clippy_argv == ["cargo", "clippy"]
+    assert clippy_env == {"CARGO_TARGET_DIR": "/qproj/target/clippy"}
     assert bevy_argv == [
         "bevy",
         "lint",
         "--config",
         'profile.dev.codegen-backend="llvm"',
-        "--target-dir=target/bevy_lint",
     ]
+    assert bevy_env == {
+        "RUSTC_WRAPPER": "",
+        "BEVY_LINT_SYSROOT": "/rust",
+        "CARGO_TARGET_DIR": "/qproj/target/bevy_lint",
+    }
     assert "--all-features" not in clippy_argv
     assert "--all-features" not in bevy_argv
 

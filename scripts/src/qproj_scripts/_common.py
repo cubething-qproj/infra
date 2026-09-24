@@ -108,6 +108,17 @@ def infra_main_dir() -> Path:
     return scripts_dir().parent
 
 
+def organization_dir() -> Path:
+    """Return the parent directory shared by the qproj Git checkouts."""
+    out = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return Path(out.stdout.strip()).resolve().parent
+
+
 def rustc_sysroot() -> str:
     """Return ``rustc --print sysroot`` (stripped)."""
     out = subprocess.run(
