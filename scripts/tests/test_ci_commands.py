@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 import typer
 from typer.testing import CliRunner
 
 from qproj_scripts import _common, bevy_lint, build, check, cli, clippy, test
+
+
+@pytest.fixture(autouse=True)
+def _isolate_command_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("CI", "LOCAL", "QPROJ_COMMAND_ARGS_JSON"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(_common, "rustc_sysroot", lambda: "/rust")
 
 
 def _set_ci(monkeypatch: pytest.MonkeyPatch, enabled: bool) -> None:
@@ -24,7 +31,6 @@ def test_ci_commands_share_cargo_default_target_and_do_not_force_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_ci(monkeypatch, True)
-    monkeypatch.setattr(bevy_lint._common, "rustc_sysroot", lambda: "/rust")
     extra = ["--features", "foo,bar", "--no-default-features", "-p", "demo"]
 
     build_argv, _ = build.cmd(extra)
@@ -74,69 +80,41 @@ def test_local_linters_keep_isolated_targets_without_forcing_features(
     assert "--all-features" not in bevy_argv
 
 
-def test_check_forwards_options_consistently_to_both_linters(
+@pytest.mark.parametrize("local", [False, True])
+@pytest.mark.parametrize(
+    ("cli_args", "workflow_args"),
+    [
+        (["--features", "foo,bar", "--no-default-features", "-p", "demo"], []),
+        ([], ["--config", 'build.rustflags=["--cfg", "two words"]', "-p", "demo"]),
+        (["-p", "demo"], ["--features", "foo,bar"]),
+        (["one", "two"], []),
+    ],
+    ids=["cli", "workflow", "combined", "positional"],
+)
+def test_check_cli_forwards_arguments_unchanged(
+    local: bool,
+    cli_args: list[str],
+    workflow_args: list[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_ci(monkeypatch, True)
-    monkeypatch.setattr(bevy_lint._common, "rustc_sysroot", lambda: "/rust")
-    extra = ["--features", "foo,bar", "--no-default-features", "-p", "demo"]
-
-    invocations = check._invocations(extra)
-
-    assert invocations[0].argv == ["cargo", "clippy", *extra]
-    assert invocations[1].argv[-len(extra) :] == extra
-
-
-def test_check_cli_preserves_forwarded_argument_boundaries(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _set_ci(monkeypatch, True)
+    if local:
+        monkeypatch.setenv("LOCAL", "1")
+    if workflow_args:
+        monkeypatch.setenv("QPROJ_COMMAND_ARGS_JSON", json.dumps(workflow_args))
     captured: list[list[str]] = []
 
-    def fake_invocations(extra: list[str]):
-        captured.append(extra)
-        return [
-            check.Invocation(["clippy"], {}),
-            check.Invocation(["bevy-lint"], {}),
-        ]
+    def fake_run(argv, **_kwargs):
+        captured.append(list(argv))
+        return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(check, "_invocations", fake_invocations)
-    monkeypatch.setattr(check, "_run_sequential", lambda _invocations: [0, 0])
+    monkeypatch.setattr(_common, "run", fake_run)
 
-    result = CliRunner().invoke(
-        cli.app,
-        ["check", "--features", "foo,bar", "--no-default-features", "-p", "demo"],
-    )
+    result = CliRunner().invoke(cli.app, ["check", *cli_args])
 
+    extra = [*workflow_args, *cli_args]
     assert result.exit_code == 0
-    assert captured == [["--features", "foo,bar", "--no-default-features", "-p", "demo"]]
-
-
-def test_workflow_json_arguments_reach_check_without_shell_parsing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _set_ci(monkeypatch, True)
-    args = ["--features", "foo,bar", "--no-default-features", "-p", "demo"]
-    monkeypatch.setenv(
-        "QPROJ_COMMAND_ARGS_JSON",
-        '["--features","foo,bar","--no-default-features","-p","demo"]',
-    )
-    captured: list[list[str]] = []
-
-    def fake_invocations(extra: list[str]):
-        captured.append(extra)
-        return [
-            check.Invocation(["clippy"], {}),
-            check.Invocation(["bevy-lint"], {}),
-        ]
-
-    monkeypatch.setattr(check, "_invocations", fake_invocations)
-    monkeypatch.setattr(check, "_run_sequential", lambda _invocations: [0, 0])
-
-    result = CliRunner().invoke(cli.app, ["check"])
-
-    assert result.exit_code == 0
-    assert captured == [args]
+    assert captured == [clippy.cmd(extra)[0], bevy_lint.cmd(extra)[0]]
 
 
 @pytest.mark.parametrize(
@@ -180,64 +158,32 @@ def test_workflow_argument_input_rejects_invalid_json_arrays(
         _common.command_args([])
 
 
-def test_check_retains_positional_package_shorthand(monkeypatch: pytest.MonkeyPatch) -> None:
-    _set_ci(monkeypatch, True)
-    monkeypatch.delenv("LOCAL", raising=False)
-    monkeypatch.setattr(bevy_lint._common, "rustc_sysroot", lambda: "/rust")
-
-    invocations = check._invocations(["one", "two"])
-
-    expected = ["-p", "one", "-p", "two"]
-    assert invocations[0].argv == ["cargo", "clippy", *expected]
-    assert invocations[1].argv[-len(expected) :] == expected
-
-
-def test_local_package_mode_retains_manifest_fan_out(monkeypatch: pytest.MonkeyPatch) -> None:
-    _set_ci(monkeypatch, False)
-    monkeypatch.setenv("LOCAL", "1")
-    monkeypatch.setattr(bevy_lint._common, "rustc_sysroot", lambda: "/rust")
-
-    invocations = check._invocations(["one", "two"])
-
-    assert [invocation.argv[-1] for invocation in invocations] == [
-        "--manifest-dir=one",
-        "--manifest-dir=one",
-        "--manifest-dir=two",
-        "--manifest-dir=two",
-    ]
-
-
-def test_ci_check_runs_linters_sequentially(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("returncodes", [(0, 0), (1, 0), (0, 2)])
+def test_ci_check_runs_linters_sequentially(
+    returncodes: tuple[int, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
     _set_ci(monkeypatch, True)
     events: list[str] = []
-    invocations = [
-        check.Invocation(["first"], {}),
-        check.Invocation(["second"], {}),
-    ]
-    monkeypatch.setattr(check, "_invocations", lambda _extra: invocations)
 
     def fake_run(argv, **_kwargs):
         events.append(f"run:{argv[0]}")
-        return SimpleNamespace(returncode=0)
+        return SimpleNamespace(returncode=returncodes[len(events) - 1])
 
-    monkeypatch.setattr(check._common, "run", fake_run)
-    ctx = cast(typer.Context, SimpleNamespace(args=[]))
+    monkeypatch.setattr(_common, "run", fake_run)
 
-    with pytest.raises(typer.Exit) as exit_info:
-        check.main(ctx)
+    result = CliRunner().invoke(cli.app, ["check"])
 
-    assert exit_info.value.exit_code == 0
-    assert events == ["run:first", "run:second"]
+    assert result.exit_code == max(returncodes)
+    assert events == ["run:cargo", "run:bevy"]
 
 
-def test_local_check_spawns_all_linters_before_waiting(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("returncodes", [(0, 0), (1, 0), (0, 2)])
+def test_local_check_spawns_all_linters_before_waiting(
+    returncodes: tuple[int, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
     _set_ci(monkeypatch, False)
     events: list[str] = []
-    invocations = [
-        check.Invocation(["first"], {}),
-        check.Invocation(["second"], {}),
-    ]
-    monkeypatch.setattr(check, "_invocations", lambda _extra: invocations)
+    codes: dict[str, int] = dict(zip(("cargo", "bevy"), returncodes, strict=True))
 
     class FakeProcess:
         def __init__(self, name: str) -> None:
@@ -245,20 +191,18 @@ def test_local_check_spawns_all_linters_before_waiting(monkeypatch: pytest.Monke
 
         def wait(self) -> int:
             events.append(f"wait:{self.name}")
-            return 0
+            return codes[self.name]
 
     def fake_spawn(invocation: check.Invocation):
         events.append(f"spawn:{invocation.argv[0]}")
         return FakeProcess(invocation.argv[0])
 
     monkeypatch.setattr(check, "_spawn", fake_spawn)
-    ctx = cast(typer.Context, SimpleNamespace(args=[]))
 
-    with pytest.raises(typer.Exit) as exit_info:
-        check.main(ctx)
+    result = CliRunner().invoke(cli.app, ["check"])
 
-    assert exit_info.value.exit_code == 0
-    assert events == ["spawn:first", "spawn:second", "wait:first", "wait:second"]
+    assert result.exit_code == max(returncodes)
+    assert events == ["spawn:cargo", "spawn:bevy", "wait:cargo", "wait:bevy"]
 
 
 def test_nextest_default_selects_workspace() -> None:
