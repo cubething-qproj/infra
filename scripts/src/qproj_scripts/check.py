@@ -30,24 +30,9 @@ def _spawn(invocation: Invocation) -> subprocess.Popen[bytes]:
 
 def _invocations(extra: list[str]) -> list[Invocation]:
     """Construct linter invocations while retaining positional package shorthand."""
-    positional_packages = bool(extra) and all(not arg.startswith("-") for arg in extra)
-    if os.environ.get("LOCAL") == "1" and positional_packages:
-        invocations: list[Invocation] = []
-        for package in extra:
-            manifest_arg = f"--manifest-dir={package}"
-            invocations.append(Invocation.from_command(clippy.cmd([manifest_arg])))
-            invocations.append(Invocation.from_command(bevy_lint.cmd([manifest_arg])))
-        return invocations
-
-    forwarded: list[str] = []
-    if positional_packages:
-        for package in extra:
-            forwarded.extend(["-p", package])
-    else:
-        forwarded = extra
     return [
-        Invocation.from_command(clippy.cmd(forwarded)),
-        Invocation.from_command(bevy_lint.cmd(forwarded)),
+        Invocation.from_command(clippy.cmd(extra)),
+        Invocation.from_command(bevy_lint.cmd(extra)),
     ]
 
 
@@ -65,7 +50,10 @@ def _run_sequential(invocations: list[Invocation]) -> list[ExitCode]:
 
 def main(ctx: typer.Context) -> None:
     """Run both linters; sequentially in CI and concurrently otherwise."""
-    invocations = _invocations(_common.command_args(ctx.args))
+    invocations = [
+        Invocation.from_command(clippy.cmd(ctx.args)),
+        Invocation.from_command(bevy_lint.cmd(ctx.args)),
+    ]
     if _common.is_ci():
         rcs = _run_sequential(invocations)
     else:
