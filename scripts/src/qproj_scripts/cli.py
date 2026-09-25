@@ -30,7 +30,6 @@ from qproj_scripts import (
     coverage,
     deny,
     init,
-    patch_cargo,
     play,
     ra_check,
     sync,
@@ -93,12 +92,6 @@ _register(
     init.main,
     ctx=_STRICT,
     help="Initialize a new downstream repo under cubething-qproj/.",
-)
-_register(
-    "patch-cargo",
-    patch_cargo.main,
-    ctx=_STRICT,
-    help="Patch a downstream Cargo.toml with the shared workspace template.",
 )
 
 
