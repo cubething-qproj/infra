@@ -35,30 +35,27 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@main
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
       - name: Sync files
         run: |
           cd downstream
           git checkout -B automation/sync-infra
 
-          # Copy files per sync-files.json
-          jq -c '.[]' ../infra/sync-files.json | while read -r entry; do
-            src=$(echo "$entry" | jq -r '.src')
-            dst=$(echo "$entry" | jq -r '.dst')
-            mkdir -p "$(dirname "$dst")"
-            cp "../infra/$src" "$dst"
-          done
-
-          # Merge shared workspace/profile/lints blocks into the
-          # downstream Cargo.toml, preserving its own [package],
-          # [dependencies], [features], [[bin]], etc.
-          if [ -f Cargo.toml ]; then
-            uvx --from ../infra/scripts qproj-scripts patch-cargo \
-              Cargo.toml \
-              --template ../infra/config/Cargo.workspace.toml
-          fi
+          template=../infra/scripts/src/qproj_scripts/assets/project-template
+          bevy_version=$(cat ../infra/.bevy-version)
+          # Keep crate-owned manifests, source, and editor/just configuration intact.
+          find "$template" -type f \
+            ! -path "$template/src/*" \
+            ! -path "$template/Cargo.toml" \
+            ! -path "$template/README.md" \
+            ! -path "$template/.gitignore" \
+            ! -path "$template/.zed/settings.json" \
+            ! -path "$template/justfile" -print0 |
+            while IFS= read -r -d '' src; do
+              dst="${src#"$template"/}"
+              mkdir -p "$(dirname "$dst")"
+              cp "$src" "$dst"
+              sed -i "s/{{bevy_version}}/$bevy_version/g" "$dst"
+            done
 
           # Stage copied files so Nix can see them in the git repo
           git add -A

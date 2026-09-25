@@ -2,6 +2,8 @@ name: Lint
 
 on:
     push:
+      branches: 'main'
+    pull_request:
 
 jobs:
     lint:
@@ -47,3 +49,15 @@ jobs:
             - name: pytest
               working-directory: scripts
               run: uv run pytest -q
+
+    auto-merge:
+        needs: lint
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/') && github.base_ref == github.event.repository.default_branch && github.event.pull_request.head.repo.full_name == github.repository
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - run: gh pr merge "${{ github.event.pull_request.number }}" --merge --delete-branch --match-head-commit "${{ github.event.pull_request.head.sha }}" --repo "${{ github.repository }}"
+              env:
+                  GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}

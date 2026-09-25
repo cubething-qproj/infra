@@ -1,252 +1,232 @@
-"""Initialize an ordinary downstream checkout under ``cubething-qproj/<name>``.
-
-Optionally creates the GitHub remote, scaffolds a Cargo project, commits
-and pushes it, then installs the shared local project configuration.
-Defaults to dry-run; pass ``-x`` / ``--execute`` to mutate.
-"""
+"""Scaffold a crate in a caller-specified directory. Dry-run unless ``-x`` is passed."""
 
 from __future__ import annotations
 
 import json
-import os
+import re
 import shutil
+import subprocess
+import tempfile
 from importlib.resources import as_file
 from pathlib import Path
 
+import tomlkit
 import typer
 
-from qproj_scripts import patch_cargo
+from qproj_scripts import bevy_lint, clippy, test
 from qproj_scripts._common import DEFAULT_BRANCH, DEFAULT_REMOTE, asset, log, run
-from qproj_scripts.sync import _sync_repo, envrc, write_file
 
 ORG = "cubething-qproj"
-
-# Files in the project-template that get {{name}} substitution before
-# being written. Everything else is copied verbatim.
-_TEMPLATED = frozenset({"Cargo.toml", "README.md"})
+_INIT_BRANCH = "automation/init-crate"
+_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
-def _default_infra_dir() -> Path:
-    home = Path.home()
-    base_dir = Path(os.environ.get("BASE_DIR", str(home / "repos")))
-    return base_dir / ORG / "infra"
-
-
-def _write(path: Path, content: str, *, dry: bool) -> None:
-    write_file(path, content, dry=dry)
-
-
-def _copy(src: Path, dst: Path, *, dry: bool) -> None:
-    level = "dry" if dry else "info"
-    log(f"cp {src} -> {dst}", level=level)
-    if dry:
-        return
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dst)
-
-
-def _render_project(name: str, dest: Path, infra_dir: Path, *, bin_: bool, dry: bool) -> None:
-    """Lay down the per-project scaffold + shared files into ``dest``."""
-    level = "dry" if dry else "info"
-
-    # 1. Per-project files from the package template.
-    skip = {"src/main.rs"} if not bin_ else {"src/lib.rs"}
-    with as_file(asset("project-template")) as tmpl_root:
-        for src in sorted(tmpl_root.rglob("*")):
-            if src.is_dir():
+def _render_project(name: str, dest: Path, bevy_version: str, *, bin_: bool, dry: bool) -> None:
+    """Copy the template, keeping only the selected crate root under src/."""
+    selected = Path("src/main.rs" if bin_ else "src/lib.rs")
+    with as_file(asset("project-template")) as template:
+        for src in sorted(template.rglob("*")):
+            if not src.is_file():
                 continue
-            rel = src.relative_to(tmpl_root)
-            if str(rel) in skip:
+            rel = src.relative_to(template)
+            if rel.parts[0] == "src" and rel != selected:
                 continue
             dst = dest / rel
-            if rel.name in _TEMPLATED:
-                text = src.read_text().replace("{{name}}", name)
-                _write(dst, text, dry=dry)
+            log(f"copy {src} -> {dst}", level="dry" if dry else "info")
+            if dry:
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            data = src.read_bytes()
+            rendered = data.replace(b"{{name}}", name.encode()).replace(
+                b"{{bevy_version}}", bevy_version.encode()
+            )
+            if data == rendered:
+                shutil.copyfile(src, dst)
             else:
-                _copy(src, dst, dry=dry)
-
-    # 2. Copy LICENSE files verbatim from infra.
-    for lic in ("LICENSE-MIT.txt", "LICENSE-APACHE.txt"):
-        _copy(infra_dir / lic, dest / lic, dry=dry)
-
-    # 3. Apply sync-files.json (shared checkout files: deny.toml,
-    #    flake.nix, ci.yml, .cargo/config.toml, justfile, nextest.toml).
-    sync_files = json.loads((infra_dir / "sync-files.json").read_text())
-    for entry in sync_files:
-        _copy(infra_dir / entry["src"], dest / entry["dst"], dry=dry)
-
-    # 4. Patch shared workspace/profile/lints into Cargo.toml.
-    cargo = dest / "Cargo.toml"
-    template_cargo = infra_dir / "config" / "Cargo.workspace.toml"
-    log(f"patch_cargo {cargo}", level=level)
-    if not dry:
-        cargo.write_text(patch_cargo.patch(cargo.read_text(), template_cargo.read_text()))
+                dst.write_bytes(rendered)
 
 
 def _bootstrap_in_place(
-    name: str,
-    repo_dir: Path,
-    remote_url: str,
-    infra_dir: Path,
-    *,
-    project: bool,
-    bin_: bool,
-    dry: bool,
+    name: str, repo_dir: Path, *, create_remote: bool, private: bool, dry: bool
 ) -> None:
-    """Initialize an ordinary checkout in its final location, commit, and push."""
-    level = "dry" if dry else "info"
+    """Initialize the scaffold as a repository and optionally publish it."""
     run(["git", "init", "-b", DEFAULT_BRANCH, str(repo_dir)], dry=dry)
-    run(["git", "-C", str(repo_dir), "remote", "add", DEFAULT_REMOTE, remote_url], dry=dry)
-
-    if project:
-        _render_project(name, repo_dir, infra_dir, bin_=bin_, dry=dry)
-    else:
-        readme = repo_dir / "README.md"
-        log(f"write {readme}", level=level)
-        if not dry:
-            readme.write_text(f"# {name}\n")
-
     run(["git", "-C", str(repo_dir), "add", "."], dry=dry)
     run(["git", "-C", str(repo_dir), "commit", "-m", "chore: initial commit"], dry=dry)
-    run(["git", "-C", str(repo_dir), "push", "-u", DEFAULT_REMOTE, DEFAULT_BRANCH], dry=dry)
+    if create_remote:
+        full = f"{ORG}/{name}"
+        run(["gh", "repo", "create", full, "--private" if private else "--public"], dry=dry)
+        run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "remote",
+                "add",
+                DEFAULT_REMOTE,
+                f"git@github.com:{full}.git",
+            ],
+            dry=dry,
+        )
+        run(["git", "-C", str(repo_dir), "push", "-u", DEFAULT_REMOTE, DEFAULT_BRANCH], dry=dry)
+
+
+def _append_registry(registry: Path, full: str) -> bool:
+    repos = json.loads(registry.read_text())
+    if full in repos:
+        return False
+    registry.write_text(json.dumps([*repos, full], indent=2) + "\n")
+    return True
+
+
+def _register(name: str, registry: Path, *, dry: bool) -> None:
+    """Open/update a PR from origin/main without modifying the infra checkout."""
+    full = f"{ORG}/{name}"
+    repo = subprocess.run(
+        ["git", "-C", str(registry.parent), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    relative = registry.absolute().relative_to(Path(repo))
+    run(["git", "-C", repo, "fetch", DEFAULT_REMOTE], dry=dry)
+    if dry:
+        log(
+            f"worktree from {DEFAULT_REMOTE}/{DEFAULT_BRANCH}: add {full}, commit, "
+            f"push --force {_INIT_BRANCH}, create/update PR, remove worktree in {repo}",
+            level="dry",
+        )
+        return
+    with tempfile.TemporaryDirectory(prefix="qproj-init-") as temp:
+        checkout = Path(temp) / "infra"
+        run(
+            [
+                "git",
+                "-C",
+                repo,
+                "worktree",
+                "add",
+                "-B",
+                _INIT_BRANCH,
+                str(checkout),
+                f"{DEFAULT_REMOTE}/{DEFAULT_BRANCH}",
+            ],
+        )
+        try:
+            target = (checkout / relative).resolve()
+            if not target.is_relative_to(checkout):
+                raise ValueError(f"registry symlink points outside the infra checkout: {target}")
+            if not _append_registry(target, full):
+                log(f"{full} already registered on {DEFAULT_REMOTE}/{DEFAULT_BRANCH}", level="info")
+                return
+            run(["git", "-C", str(checkout), "add", str(target.relative_to(checkout))])
+            run(["git", "-C", str(checkout), "commit", "-m", f"chore: register {name}"])
+            run(["git", "-C", str(checkout), "push", "--force", DEFAULT_REMOTE, _INIT_BRANCH])
+            existing = run(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--repo",
+                    f"{ORG}/infra",
+                    "--head",
+                    _INIT_BRANCH,
+                    "--json",
+                    "number",
+                    "-q",
+                    ".[0].number",
+                ],
+                capture_output=True,
+            )
+            assert existing is not None
+            if not existing.stdout.strip():
+                run(
+                    [
+                        "gh",
+                        "pr",
+                        "create",
+                        "--repo",
+                        f"{ORG}/infra",
+                        "--head",
+                        _INIT_BRANCH,
+                        "--base",
+                        DEFAULT_BRANCH,
+                        "--title",
+                        f"chore: register {name}",
+                        "--body",
+                        f"Register {full} as a downstream repository.",
+                    ],
+                )
+        finally:
+            run(["git", "-C", repo, "worktree", "remove", "--force", str(checkout)])
+
+
+def _patch_workspace(name: str, dest: Path, workspace: Path, *, dry: bool) -> None:
+    """Make Git dependencies on a new library resolve to its local checkout."""
+    rel = dest.resolve().relative_to(workspace.parent.resolve())
+    url = f"https://github.com/{ORG}/{name}"
+    document = tomlkit.parse(workspace.read_text())
+    if "patch" in document and url in document["patch"]:
+        return
+    log(f"patch {workspace}: {url} = {rel}", level="dry" if dry else "info")
+    if dry:
+        return
+    if "patch" not in document:
+        document["patch"] = tomlkit.table()
+    entry = tomlkit.inline_table()
+    entry["path"] = rel.as_posix()
+    document["patch"][url] = {name: entry}
+    workspace.write_text(tomlkit.dumps(document))
+
+
+def _validate(name: str, dest: Path, bevy_version: str, workspace: Path | None) -> None:
+    if not _NAME.fullmatch(name):
+        raise typer.BadParameter("name must be a bare Rust identifier")
+    if not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", bevy_version):
+        raise typer.BadParameter("bevy version must be a numeric version (e.g. 0.19)")
+    if dest.exists() and (not dest.is_dir() or any(dest.iterdir())):
+        raise typer.BadParameter(f"{dest} already exists and is non-empty")
+    if workspace is not None:
+        if not workspace.is_file():
+            raise typer.BadParameter(f"workspace manifest not found: {workspace}")
+        if not dest.resolve().is_relative_to(workspace.parent.resolve()):
+            raise typer.BadParameter("destination must be inside the workspace")
 
 
 def main(
-    name: str = typer.Argument(
-        ...,
-        help="Repo name (without org), e.g. q_widgets. Must not contain '/'.",
+    name: str = typer.Argument(..., help="Crate name, e.g. q_cam."),
+    bin_: bool = typer.Option(False, "--bin", help="Create a binary crate."),
+    lib: bool = typer.Option(False, "--lib", help="Create a library crate."),
+    dest: Path = typer.Option(..., "--dest", help="Target directory."),
+    bevy_version: str = typer.Option(..., "--bevy-version", help="Version for template tokens."),
+    registry: Path | None = typer.Option(None, "--registry", help="Infra downstream-repos.json."),
+    workspace: Path | None = typer.Option(
+        None, "--workspace", help="Optional workspace manifest to patch for libraries."
     ),
-    create_remote: bool = typer.Option(
-        True,
-        "--create-remote/--no-create-remote",
-        help="Create the GitHub repo via `gh repo create` before cloning.",
-    ),
+    execute: bool = typer.Option(False, "-x", "--execute", help="Execute (default is dry-run)."),
+    no_remote: bool = typer.Option(False, "--no-remote", help="Keep the new repository local."),
     private: bool = typer.Option(
-        True,
-        "--private/--public",
-        help="Visibility passed to `gh repo create`. Ignored without --create-remote.",
-    ),
-    project: bool = typer.Option(
-        True,
-        "--project/--no-project",
-        help="Scaffold a Cargo project before the initial commit.",
-    ),
-    bin_: bool = typer.Option(
-        False,
-        "--bin/--lib",
-        help="Scaffold a binary crate (src/main.rs) instead of a library (src/lib.rs).",
-    ),
-    infra_dir: Path = typer.Option(
-        None,
-        "--infra-dir",
-        help="Path to the infra working tree (source of sync-files.json, "
-        "LICENSE files, Cargo.workspace.toml). "
-        "Defaults to $BASE_DIR/cubething-qproj/infra.",
-    ),
-    execute: bool = typer.Option(
-        False,
-        "-x",
-        "--execute",
-        help="Actually run mutating commands (default is dry-run).",
-    ),
-    clobber: bool = typer.Option(
-        False,
-        "--clobber",
-        help="Wipe the target repo dir if it already exists and is non-empty.",
+        False, "--private", help="Create a private GitHub repo (default: public)."
     ),
 ) -> None:
-    """Initialize a new downstream repo under cubething-qproj/<name>."""
-    if "/" in name or not name:
-        log(f"Invalid repo name: {name!r} (must not contain '/')", level="error")
-        raise typer.Exit(code=1)
-
-    full = f"{ORG}/{name}"
+    """Create a templated Rust crate, with optional GitHub publication and registration."""
+    if bin_ == lib:
+        raise typer.BadParameter("select exactly one of --bin or --lib")
+    _validate(name, dest, bevy_version, workspace if lib else None)
+    if registry is not None and not no_remote and not registry.is_file():
+        raise typer.BadParameter(f"registry not found: {registry}")
     dry = not execute
-
-    # Refuse to re-init an already-registered repo.
-    downstream_repos_text = asset("downstream-repos.json").read_text("utf8")
-    downstream_repos = json.loads(downstream_repos_text)
-    if full in downstream_repos:
-        log(f"{full} already in downstream-repos.json", level="error")
-        raise typer.Exit(code=1)
-
-    home = Path.home()
-    base_dir = Path(os.environ.get("BASE_DIR", str(home / "repos")))
-    org_dir = base_dir / ORG
-    config_dir = org_dir / ".config"
-    repo_dir = base_dir / full
-    infra_dir = (infra_dir or _default_infra_dir()).resolve()
-
-    # Sanity-check infra_dir before we touch anything.
-    if project:
-        missing = [
-            p
-            for p in (
-                "sync-files.json",
-                "LICENSE-MIT.txt",
-                "LICENSE-APACHE.txt",
-                "config/Cargo.workspace.toml",
-            )
-            if not (infra_dir / p).is_file()
-        ]
-        if missing:
-            log(f"--infra-dir {infra_dir} missing: {', '.join(missing)}", level="error")
-            raise typer.Exit(code=1)
-
-    if repo_dir.exists() and any(repo_dir.iterdir()):
-        if not clobber:
-            log(
-                f"{repo_dir} already exists and is non-empty. Re-run with --clobber to wipe it.",
-                level="error",
-            )
-            raise typer.Exit(code=1)
-        log(f"--clobber: rm -rf {repo_dir}", level="dry" if dry else "warn")
-        if not dry:
-            shutil.rmtree(repo_dir)
-
-    # Ensure shared org-level config + .envrc exist (mirrors sync.main's
-    # top block). Duplicated for now; dedupe candidate for later.
-    level = "dry" if dry else "info"
-    with as_file(asset(".config")) as src:
-        log(f"rm -rf {config_dir}", level)
-        if not dry:
-            shutil.rmtree(config_dir, ignore_errors=True)
-        log(f"cp -r {src} -> {config_dir}", level)
-        if not dry:
-            shutil.copytree(src, config_dir)
-    log("writing .envrc", "info")
-    write_file(org_dir / ".envrc", envrc(), dry=dry)
-
-    # Create the remote and initialize the ordinary checkout in place.
-    if create_remote:
-        visibility = "--private" if private else "--public"
-        run(["gh", "repo", "create", full, visibility], dry=dry)
-        remote_url = f"git@github.com:{full}.git"
-        _bootstrap_in_place(
-            name,
-            repo_dir,
-            remote_url,
-            infra_dir,
-            project=project,
-            bin_=bin_,
-            dry=dry,
-        )
+    _render_project(name, dest, bevy_version, bin_=bin_, dry=dry)
+    if not dry:
+        for command in (clippy.cmd, bevy_lint.cmd, test.cmd):
+            args = ["-p", name, "--no-tests=pass"] if command is test.cmd else ["-p", name]
+            argv, env = command(args)
+            run(argv, env_overrides=env or None)
     else:
-        log(
-            f"--no-create-remote: assuming {full} already exists with origin/main",
-            level="info",
-        )
-
-    # Fetch the checkout and install local project configuration (idempotent).
-    _sync_repo(full, base_dir, config_dir, dry=dry)
-
-    # Register in downstream-repos.json so future `sync` runs pick it up.
-    new_repos = [*downstream_repos, full]
-    with as_file(asset("downstream-repos.json")) as p:
-        log(f"update {p}", level)
-        if not dry:
-            p.write_text(json.dumps(new_repos, indent=2) + "\n")
-
-    log(f"initialized {full} at {repo_dir}", level="info")
-    if project:
-        log(f"next: cd {repo_dir} && just sync-scripts && just build", level="info")
+        log(f"verify {name}: clippy, bevy lint, nextest (--no-tests=pass)", level="dry")
+    _bootstrap_in_place(name, dest, create_remote=not no_remote, private=private, dry=dry)
+    if registry is not None and not no_remote:
+        _register(name, registry, dry=dry)
+    if workspace is not None and lib:
+        _patch_workspace(name, dest, workspace, dry=dry)
+    log(f"initialized {name} at {dest}", level="dry" if dry else "info")
