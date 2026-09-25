@@ -3,5 +3,7 @@
   "cubething-qproj/q_proc",
   "cubething-qproj/q_screens",
   "cubething-qproj/q_term",
+  "cubething-qproj/q_shell",
+  "cubething-qproj/q_cam",
   "cubething-qproj/q_test_harness"
 ]

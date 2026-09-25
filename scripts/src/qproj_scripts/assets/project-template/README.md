@@ -1,6 +1,6 @@
 # {{name}}
 
-TODO: one-line description.
+TODO: Coverage badge, brief description.
 
 ## License
 
