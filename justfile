@@ -18,8 +18,6 @@ check:
 test:
     cd scripts && uv run pytest -q
 
-sync *args:
-    {{ qproj }} sync {{ args }}
 
 sync-scripts:
     uv tool install --force qproj-scripts --from {{ SCRIPTS_SRC }}

@@ -32,7 +32,6 @@ from qproj_scripts import (
     init,
     play,
     ra_check,
-    sync,
     test,
 )
 
@@ -81,17 +80,12 @@ _register(
     ctx=_PASSTHROUGH,
     help="Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.",
 )
-_register(
-    "sync",
-    sync.main,
-    ctx=_STRICT,
-    help="Sync ordinary local checkouts of workflow consumer repos.",
-)
+
 _register(
     "init",
     init.main,
     ctx=_STRICT,
-    help="Initialize a new downstream repo under cubething-qproj/.",
+    help="Scaffold a Rust crate in a caller-specified directory.",
 )
 
 
