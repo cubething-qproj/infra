@@ -39,4 +39,4 @@ runs:
         # `--show-stats` in its post step. A version mismatch there
         # causes "Mismatch of client/server versions?" and fails CI on
         # cleanup. Bump in lockstep with nixpkgs' sccache.
-        version: "v0.17.0"
+        version: "v0.18.0"
