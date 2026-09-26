@@ -1,6 +1,7 @@
 name: Setup CI environment
 description: >
-  Shared CI setup: installs Nix, restores Nix and Cargo caches, and starts sccache.
+  Shared CI setup: installs Nix, restores Nix and Cargo caches, and configures
+  sccache's GitHub Actions cache backend.
 
 inputs:
   cargo-cache-prefix:
@@ -30,13 +31,14 @@ runs:
       with:
         prefix-key: ${{ inputs.cargo-cache-prefix }}-ci
 
-    - name: Run sccache
-      uses: mozilla-actions/sccache-action@v0.0.11
+    # sccache itself comes from the nix devshell. Its GHA cache backend needs
+    # these runtime values, which are only visible to JavaScript actions.
+    # ACTIONS_CACHE_SERVICE_V2 selects the current cache API; without it,
+    # sccache falls back to the retired v1 service.
+    - name: Configure sccache
+      uses: actions/github-script@v9
       with:
-        # Pin to match the sccache version provided by the nix devshell
-        # (see flake.nix). The devshell's sccache is the actual server
-        # (RUSTC_WRAPPER=sccache); the action's binary only runs
-        # `--show-stats` in its post step. A version mismatch there
-        # causes "Mismatch of client/server versions?" and fails CI on
-        # cleanup. Bump in lockstep with nixpkgs' sccache.
-        version: "v0.18.0"
+        script: |
+          core.exportVariable('ACTIONS_CACHE_SERVICE_V2', 'on');
+          core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');

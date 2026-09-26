@@ -68,6 +68,10 @@ jobs:
               env:
                   QPROJ_COMMAND_ARGS_JSON: ${{ inputs['test-args'] }}
               run: qproj-scripts test || [ "$?" -eq 4 ]
+            - name: sccache stats
+              if: ${{ !cancelled() }}
+              continue-on-error: true
+              run: sccache --show-stats
 
     generate-coverage:
         needs: build_and_test
