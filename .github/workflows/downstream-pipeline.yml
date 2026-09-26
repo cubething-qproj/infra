@@ -18,6 +18,11 @@ on:
                 required: false
                 type: string
                 default: "[]"
+            coverage-all-features:
+                description: 'Run coverage with all package features enabled.'
+                required: false
+                type: boolean
+                default: false
         secrets:
             DISPATCH_TOKEN:
                 description: "PAT with contents:write and pull-requests:write for auto-merge."
@@ -86,7 +91,11 @@ jobs:
               id: pkg
               run: echo "name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')" >> "$GITHUB_OUTPUT"
             - name: Collect coverage data
+              if: ${{ !inputs['coverage-all-features'] }}
               run: cargo llvm-cov nextest --lcov --output-path report.lcov
+            - name: Collect all-features coverage data
+              if: ${{ inputs['coverage-all-features'] }}
+              run: cargo llvm-cov nextest --all-features --lcov --output-path report.lcov
             - name: Upload to coveralls
               uses: coverallsapp/github-action@v2.3.6
               with:
