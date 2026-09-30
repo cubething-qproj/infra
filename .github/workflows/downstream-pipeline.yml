@@ -9,10 +9,15 @@ on:
                 type: string
                 default: "[]"
             check-args:
-                description: 'JSON string array forwarded to both Clippy and bevy_lint.'
+                description: 'Deprecated and ignored; use clippy-args. Kept until every downstream ci.yml stops passing it.'
                 required: false
                 type: string
                 default: "[]"
+            clippy-args:
+                description: 'Space-separated arguments forwarded to `cargo clippy` (for example `--all-features --examples`).'
+                required: false
+                type: string
+                default: ""
             test-args:
                 description: 'JSON string array forwarded to `cargo nextest run`.'
                 required: false
@@ -62,8 +67,10 @@ jobs:
               run: qproj-scripts build
             - name: Check
               env:
-                  QPROJ_COMMAND_ARGS_JSON: ${{ inputs['check-args'] }}
-              run: qproj-scripts check
+                  QPROJ_CLIPPY_ARGS: ${{ inputs['clippy-args'] }}
+              run: |
+                  read -ra args <<<"$QPROJ_CLIPPY_ARGS"
+                  cargo clippy "${args[@]}"
             - name: Test
               env:
                   QPROJ_COMMAND_ARGS_JSON: ${{ inputs['test-args'] }}

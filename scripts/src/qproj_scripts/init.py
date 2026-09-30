@@ -13,7 +13,7 @@ from pathlib import Path
 import tomlkit
 import typer
 
-from qproj_scripts import bevy_lint, clippy, test
+from qproj_scripts import test
 from qproj_scripts._common import DEFAULT_BRANCH, DEFAULT_REMOTE, asset, log, run
 
 ORG = "cubething-qproj"
@@ -218,12 +218,11 @@ def main(
     dry = not execute
     _render_project(name, dest, bevy_version, bin_=bin_, dry=dry)
     if not dry:
-        for command in (clippy.cmd, bevy_lint.cmd, test.cmd):
-            args = ["-p", name, "--no-tests=pass"] if command is test.cmd else ["-p", name]
-            argv, env = command(args)
-            run(argv, env_overrides=env or None)
+        run(["cargo", "clippy", "-p", name])
+        argv, env = test.cmd(["-p", name, "--no-tests=pass"])
+        run(argv, env_overrides=env or None)
     else:
-        log(f"verify {name}: clippy, bevy lint, nextest (--no-tests=pass)", level="dry")
+        log(f"verify {name}: clippy, nextest (--no-tests=pass)", level="dry")
     _bootstrap_in_place(name, dest, create_remote=not no_remote, private=private, dry=dry)
     if registry is not None and not no_remote:
         _register(name, registry, dry=dry)

@@ -11,16 +11,6 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # bevy_cli ships its own flake exposing a `bevy` package whose
-    # binary includes the `lint` subcommand (which in turn dispatches to
-    # bevy_lint_driver). Consuming it directly removes the need to vendor
-    # the bevy_cli source and rebuild bevy_lint from scratch via crane.
-    bevy_cli = {
-      url = "github:TheBevyFlock/bevy_cli";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.rust-overlay.follows = "rust-overlay";
-      inputs.flake-utils.follows = "flake-utils";
-    };
   };
 
   # GPU driver wrapping (formerly via nixGL inputs + a dedicated `nvidia`
@@ -34,16 +24,12 @@
     nixpkgs,
     flake-utils,
     rust-overlay,
-    bevy_cli,
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
         overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {inherit system overlays;};
 
-        # Keep in sync with bevy_cli's rust-toolchain.toml. The
-        # upstream flake's `bevy_lint_driver` is built against this exact
-        # nightly; running it under any other rustc ABI fails to load.
         mkRustToolchain = {
           profile ? "default",
           extensions,
@@ -72,7 +58,7 @@
 
         # Pipeline toolchain: minimal profile avoids rust-docs and rustfmt.
         # Cranelift remains because the shared Cargo dev profile selects it;
-        # Clippy is required by qproj-scripts check.
+        # Clippy is required by the pipeline's Check step.
         rustToolchainCi = mkRustToolchain {
           profile = "minimal";
           extensions = [
@@ -96,9 +82,6 @@
           ];
         };
 
-        # The `bevy` CLI from the upstream flake. `bevy lint` is the
-        # entry point; the package bundles the lint driver alongside it.
-        bevy-cli = bevy_cli.packages.${system}.default;
 
         linuxDeps = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [
           alsa-lib
@@ -110,17 +93,13 @@
 
         mkShell = {
           toolchain ? rustToolchainDev,
-          includeBevyCli ? true,
           extraPackages ? [],
           extraShellHook ? "",
         }:
           pkgs.mkShell {
             nativeBuildInputs = [pkgs.pkg-config];
 
-            buildInputs =
-              linuxDeps
-              ++ [toolchain]
-              ++ pkgs.lib.optional includeBevyCli bevy-cli;
+            buildInputs = linuxDeps ++ [toolchain];
 
             packages = extraPackages;
 
@@ -144,7 +123,7 @@
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath linuxDeps;
           };
 
-        # Packages used by `qproj-scripts build|check|test`.
+        # Packages used by `qproj-scripts build|test` and the pipeline's Check step.
         ciPackages = with pkgs; [
           sccache
           mold
@@ -185,7 +164,6 @@
         };
         devShells.ci-coverage = mkShell {
           toolchain = rustToolchainCoverage;
-          includeBevyCli = false;
           extraPackages = coveragePackages;
           extraShellHook = ''
             export CARGO_PROFILE_DEV_DEBUG=0
