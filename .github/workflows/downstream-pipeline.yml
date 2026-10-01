@@ -8,11 +8,6 @@ on:
                 required: false
                 type: string
                 default: "[]"
-            check-args:
-                description: 'Deprecated and ignored; use clippy-args. Kept until every downstream ci.yml stops passing it.'
-                required: false
-                type: string
-                default: "[]"
             clippy-args:
                 description: 'Space-separated arguments forwarded to `cargo clippy` (for example `--all-features --examples`).'
                 required: false
