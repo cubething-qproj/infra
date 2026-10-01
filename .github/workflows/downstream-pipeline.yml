@@ -101,7 +101,7 @@ jobs:
               if: ${{ inputs['coverage-all-features'] }}
               run: cargo llvm-cov nextest --all-features --lcov --output-path report.lcov
             - name: Upload to coveralls
-              uses: coverallsapp/github-action@v2.3.6
+              uses: coverallsapp/github-action@v2.3.8
               with:
                   flag-name: ${{ steps.pkg.outputs.name }}
 
