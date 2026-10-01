@@ -3,11 +3,12 @@
 Two modes, chosen by ``--mode`` (default ``auto``):
 
 ``local``
-    Re-adds ``target/debug/deps`` to ``LD_LIBRARY_PATH`` (so dylib-feature
-    builds resolve ``libbevy_dylib-<hash>.so`` under nix-shell) and injects
+    Prepends ``target/debug/deps`` and the toolchain's target lib dir to
+    ``LD_LIBRARY_PATH`` (so ``dylib``-feature builds resolve
+    ``libbevy_dylib-<hash>.so`` and ``libstd-*.so``) and injects
     ``CARGO_MANIFEST_DIR=$PWD`` into the child env so Bevy's ``AssetPlugin``
     finds the crate's ``assets/`` at runtime, then ``os.execvpe``'s the
-    binary. GPU driver wrapping (nixGL) is the caller's responsibility.
+    binary.
 
 ``remote``
     ``patchelf``-rewrites the binary to load through the host's standard
@@ -298,7 +299,12 @@ def _exec_remote(plan: RunPlan) -> None:
 
 
 def _exec_local(plan: RunPlan) -> None:
-    """Re-point ``LD_LIBRARY_PATH`` at ``target/debug/deps`` and exec the binary.
+    """Prepend ``target/debug/deps`` and the toolchain lib dir to ``LD_LIBRARY_PATH`` and exec.
+
+    ``target/debug/deps`` holds ``libbevy_dylib-<hash>.so`` for
+    ``dylib``-feature builds; the toolchain's target lib dir holds the
+    matching dynamic ``libstd-*.so`` (a plain host toolchain bakes neither
+    into the binary's runpath).
 
     Bevy's ``AssetPlugin`` reads ``CARGO_MANIFEST_DIR`` from the process
     env at runtime (via ``std::env::var``) to locate the assets root.
@@ -320,8 +326,10 @@ def _exec_local(plan: RunPlan) -> None:
         _common.log(_DEPRECATED_ARGS_MSG, level="warn")
 
     deps_dir = Path.cwd() / "target" / "debug" / "deps"
+    libstd_dir = Path(_common.rustc_target_libdir())
     existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
-    run_ld_path = f"{deps_dir}{':' + existing_ld if existing_ld else ''}"
+    prefix = ":".join([str(deps_dir), str(libstd_dir)])
+    run_ld_path = f"{prefix}{':' + existing_ld if existing_ld else ''}"
 
     final = [
         str(plan.target_path),

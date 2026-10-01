@@ -20,7 +20,7 @@ test:
 
 
 sync-scripts:
-    uv tool install --force qproj-scripts --from {{ SCRIPTS_SRC }}
+    uv tool install --force --python /usr/bin/python3 qproj-scripts --from {{ SCRIPTS_SRC }}
 
 update-flake:
     nix flake update

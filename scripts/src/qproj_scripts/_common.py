@@ -98,3 +98,15 @@ def rustc_sysroot() -> str:
         ["rustc", "--print", "sysroot"], capture_output=True, text=True, check=True
     )
     return out.stdout.strip()
+
+
+def rustc_target_libdir() -> str:
+    """Return ``rustc --print target-libdir`` (stripped).
+
+    This is where the toolchain keeps the dynamic ``libstd-*.so``, needed
+    at runtime by ``dylib``-feature builds.
+    """
+    out = subprocess.run(
+        ["rustc", "--print", "target-libdir"], capture_output=True, text=True, check=True
+    )
+    return out.stdout.strip()

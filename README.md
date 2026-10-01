@@ -16,10 +16,25 @@ template, Nix flake, CI, and dev tooling.
 
 ## Requirements
 
-- Unix-based OS
-- [direnv](https://direnv.net/)
-- [nix](https://nixos.org/download/)
+Local development runs on the host toolchain; nix is only needed to
+reproduce CI (`nix develop .#ci`).
+
+- [rustup](https://rustup.rs/) — picks up the pinned nightly from `rust-toolchain.toml`
+- [direnv](https://direnv.net/) — loads `.envrc`
 - [just](https://github.com/casey/just)
+- [uv](https://docs.astral.sh/uv/)
+- [gh](https://cli.github.com/)
+
+Host packages (Arch names):
+
+- libraries and build tools:
+  `alsa-lib systemd-libs wayland libxkbcommon vulkan-icd-loader pkgconf clang mold`
+- tools: `sccache python cargo-nextest cargo-llvm-cov cargo-deny actionlint patchelf rsync`
+
+Per-workflow extras: `act` plus Docker for `just ci`; `dx` (dioxus-cli) for
+`just dev`; cmake and a C++ compiler to build the Jackdaw editor.
+
+Install the shared CLI against the host Python with `just sync-scripts`.
 
 ## Compatibility
 

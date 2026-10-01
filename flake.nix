@@ -13,12 +13,6 @@
     };
   };
 
-  # GPU driver wrapping (formerly via nixGL inputs + a dedicated `nvidia`
-  # devshell) is now handled ad-hoc in the `play` justfile recipe via
-  # `nix run github:nix-community/nixGL#nixVulkan<Vendor>`. That keeps the
-  # devshell pure (no `--impure`) and avoids paying nixGL's closure cost on
-  # every shell entry -- you only pay it when you actually launch a binary.
-
   outputs = {
     self,
     nixpkgs,
@@ -46,20 +40,6 @@
           (builtins.getAttr profile pkgs.rust-bin.nightly.${rustNightlyDate}).override {
             inherit extensions targets;
           };
-
-        # The default profile includes rustdoc, local HTML documentation, and
-        # rustfmt in addition to the explicitly requested developer tools.
-        rustToolchainDev = mkRustToolchain {
-          extensions = [
-            "llvm-tools-preview"
-            "clippy"
-            "rust-analyzer"
-            "rust-src"
-          ];
-          targets = [
-            "x86_64-unknown-linux-gnu"
-          ];
-        };
 
         # Pipeline toolchain: minimal profile avoids rust-docs and rustfmt.
         # Clippy is required by the pipeline's Check step.
@@ -95,7 +75,7 @@
         ]);
 
         mkShell = {
-          toolchain ? rustToolchainDev,
+          toolchain,
           extraPackages ? [],
           extraShellHook ? "",
         }:
@@ -109,16 +89,6 @@
             shellHook = ''
               export CARGO_TERM_COLOR="always"
               export PYTHONUNBUFFERED=1
-
-              if [ -n "$SSH_CLIENT" ]; then
-                export FEATURES=""
-              else
-                export FEATURES="dylib"
-              fi
-
-              if [ -f ".env.local" ]; then
-                source ".env.local"
-              fi
 
               ${extraShellHook}
             '';
@@ -142,20 +112,7 @@
           cargo-nextest
           cargo-llvm-cov
         ];
-
-        # Full developer toolbox.
-        devPackages = with pkgs;
-          ciPackages
-          ++ [
-            patchelf
-            cargo-deny
-            cargo-llvm-cov
-            act
-            actionlint
-            just
-          ];
       in {
-        devShells.default = mkShell {extraPackages = devPackages;};
         devShells.ci = mkShell {
           toolchain = rustToolchainCi;
           extraPackages = ciPackages;
