@@ -30,12 +30,20 @@
         overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {inherit system overlays;};
 
+        # The nightly date comes from the project template's rust-toolchain.toml,
+        # which the sync copies downstream for local rustup builds. Only the
+        # channel is read: each shell below picks its own components, which
+        # keeps CI closures small.
+        rustNightlyDate = pkgs.lib.removePrefix "nightly-" (builtins.fromTOML (
+          builtins.readFile ./scripts/src/qproj_scripts/assets/project-template/rust-toolchain.toml
+        )).toolchain.channel;
+
         mkRustToolchain = {
           profile ? "default",
           extensions,
           targets,
         }:
-          (builtins.getAttr profile pkgs.rust-bin.nightly."2026-04-16").override {
+          (builtins.getAttr profile pkgs.rust-bin.nightly.${rustNightlyDate}).override {
             inherit extensions targets;
           };
 
@@ -43,26 +51,21 @@
         # rustfmt in addition to the explicitly requested developer tools.
         rustToolchainDev = mkRustToolchain {
           extensions = [
-            "rustc-codegen-cranelift-preview"
-            "rustc-dev"
             "llvm-tools-preview"
             "clippy"
             "rust-analyzer"
             "rust-src"
           ];
           targets = [
-            "x86_64-pc-windows-msvc"
             "x86_64-unknown-linux-gnu"
           ];
         };
 
         # Pipeline toolchain: minimal profile avoids rust-docs and rustfmt.
-        # Cranelift remains because the shared Cargo dev profile selects it;
         # Clippy is required by the pipeline's Check step.
         rustToolchainCi = mkRustToolchain {
           profile = "minimal";
           extensions = [
-            "rustc-codegen-cranelift-preview"
             "clippy"
           ];
           targets = [
@@ -70,8 +73,8 @@
           ];
         };
 
-        # Coverage explicitly selects LLVM and runs on a separate runner. It
-        # needs LLVM's instrumentation tools, but not Clippy or Cranelift.
+        # Coverage runs on a separate runner. It needs LLVM's instrumentation
+        # tools, but not Clippy.
         rustToolchainCoverage = mkRustToolchain {
           profile = "minimal";
           extensions = [
