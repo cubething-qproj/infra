@@ -11,9 +11,6 @@ a group as an attempted subcommand name. Registering as a command makes
 each verb a Click *leaf*, where ``allow_extra_args`` /
 ``ignore_unknown_options`` actually take effect and pass-through args
 like ``qproj-scripts build -F dylib`` reach ``cargo`` intact.
-
-The only verb defined directly in this module is ``fix``, a thin alias
-for ``clippy --fix`` that reuses :func:`qproj_scripts.clippy.cmd`.
 """
 
 from __future__ import annotations
@@ -21,22 +18,17 @@ from __future__ import annotations
 import typer
 
 from qproj_scripts import (
-    _common,
-    bevy_lint,
     build,
-    check,
     ci,
-    clippy,
     coverage,
     deny,
     init,
     play,
-    ra_check,
     test,
 )
 
 # Verbs that forward all extra args/options to an underlying tool (cargo,
-# bevy, act, ...). They must tolerate unknown options so that flags like
+# act, ...). They must tolerate unknown options so that flags like
 # `-F dylib` or `--release` pass through instead of being parsed as
 # qproj-scripts options.
 _PASSTHROUGH = {
@@ -62,24 +54,10 @@ def _register(name: str, fn, *, ctx, help: str) -> None:
 
 _register("build", build.main, ctx=_PASSTHROUGH, help="Build the workspace.")
 _register("play", play.main, ctx=_PASSTHROUGH, help="Build and run a quell binary.")
-_register(
-    "check",
-    check.main,
-    ctx=_PASSTHROUGH,
-    help="Run Clippy and bevy_lint (sequentially in CI, concurrently locally).",
-)
-_register("clippy", clippy.main, ctx=_PASSTHROUGH, help="Run Clippy.")
-_register("bevy-lint", bevy_lint.main, ctx=_PASSTHROUGH, help="Run bevy_lint.")
 _register("deny", deny.main, ctx=_STRICT, help="Audit dependencies via cargo deny.")
 _register("test", test.main, ctx=_PASSTHROUGH, help="Run the workspace test suite via nextest.")
 _register("coverage", coverage.main, ctx=_PASSTHROUGH, help="Generate a coverage report.")
 _register("ci", ci.main, ctx=_PASSTHROUGH, help="Run GitHub Actions workflows locally via act.")
-_register(
-    "ra-check",
-    ra_check.main,
-    ctx=_PASSTHROUGH,
-    help="Emit Clippy + bevy_lint diagnostics as JSON for rust-analyzer.",
-)
 
 _register(
     "init",
@@ -87,15 +65,3 @@ _register(
     ctx=_STRICT,
     help="Scaffold a Rust crate in a caller-specified directory.",
 )
-
-
-@app.command(
-    name="fix",
-    context_settings=_PASSTHROUGH,
-    help="Run Clippy with --fix to apply autofixable suggestions.",
-)
-def fix(ctx: typer.Context) -> None:
-    """Run ``cargo clippy --fix`` with the standard target-directory policy."""
-    argv, env = clippy.cmd(["--fix", *ctx.args])
-    result = _common.run(argv, env_overrides=env or None, check=False)
-    raise typer.Exit(result.returncode)  # pyright: ignore[reportOptionalMemberAccess]

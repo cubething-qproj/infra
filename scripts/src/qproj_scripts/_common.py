@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -15,21 +14,6 @@ import typer
 
 DEFAULT_BRANCH = os.environ.get("DEFAULT_BRANCH", "main")
 DEFAULT_REMOTE = os.environ.get("DEFAULT_REMOTE", "origin")
-
-
-type ExitCode = int
-
-
-@dataclass(frozen=True, slots=True)
-class Invocation:
-    """One external command and its environment overrides."""
-
-    argv: list[str]
-    env_overrides: dict[str, str]
-
-    @classmethod
-    def from_command(cls, command: tuple[list[str], dict[str, str]]) -> Invocation:
-        return cls(*command)
 
 
 def is_ci() -> bool:
@@ -106,17 +90,6 @@ def scripts_dir() -> Path:
 def infra_main_dir() -> Path:
     """Return ``infra/main`` (parent of :func:`scripts_dir`)."""
     return scripts_dir().parent
-
-
-def organization_dir() -> Path:
-    """Return the parent directory shared by the qproj Git checkouts."""
-    out = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return Path(out.stdout.strip()).resolve().parent
 
 
 def rustc_sysroot() -> str:

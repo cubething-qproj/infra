@@ -4,9 +4,9 @@
     "rust-analyzer": {
       "initialization_options": {
         "linkedProjects": ["./Cargo.toml"],
-        "cargo": { "features": "all" },
+        "cargo": { "features": "all", "targetDir": true },
         "check": {
-          "overrideCommand": ["just", "ra-check"],
+          "command": "clippy",
           "features": "all",
           "workspace": false
         }
