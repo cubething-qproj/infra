@@ -106,6 +106,7 @@ def _install_mocks(
     monkeypatch.setattr(play.build, "cmd", fake_build_cmd)
     monkeypatch.setattr(play._common, "run", fake_common_run)
     monkeypatch.setattr(play._common, "rustc_sysroot", lambda: str(sysroot))
+    monkeypatch.setattr(play._common, "rustc_target_libdir", lambda: str(tmp_path / "fake-libdir"))
     monkeypatch.setattr(play.os, "execvpe", fake_execvpe)
     monkeypatch.setattr(play.subprocess, "run", fake_subprocess_run)
 
@@ -296,8 +297,23 @@ def test_local_ld_library_path_includes_target_debug_deps(
 
     _, _, env_snapshot = captured["execvpe"][0]
     ld = env_snapshot["LD_LIBRARY_PATH"]
-    first = ld.split(":")[0]
+    first, second = ld.split(":")[:2]
     assert Path(first) == tmp_path / "target" / "debug" / "deps"
+    assert Path(second) == tmp_path / "fake-libdir"
+
+
+def test_local_ld_library_path_appends_existing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("SSH_CLIENT", raising=False)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/existing")
+    captured = _install_mocks(monkeypatch, tmp_path=tmp_path)
+
+    _invoke(_make_app(), [], monkeypatch)
+
+    _, _, env_snapshot = captured["execvpe"][0]
+    assert env_snapshot["LD_LIBRARY_PATH"].endswith(":/existing")
 
 
 # ---------------------------------------------------------------------------
