@@ -5,5 +5,6 @@
   "cubething-qproj/q_term",
   "cubething-qproj/q_shell",
   "cubething-qproj/q_cam",
-  "cubething-qproj/q_test_harness"
+  "cubething-qproj/q_test_harness",
+  "cubething-qproj/q_query_lang"
 ]
