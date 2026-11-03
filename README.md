@@ -19,7 +19,7 @@ template, Nix flake, CI, and dev tooling.
 Local development runs on the host toolchain; nix is only needed to
 reproduce CI (`nix develop .#ci`).
 
-- [rustup](https://rustup.rs/) — picks up the pinned nightly from `rust-toolchain.toml`
+- [rustup](https://rustup.rs/) — picks up the pinned toolchain from `rust-toolchain.toml`
 - [direnv](https://direnv.net/) — loads `.envrc`
 - [just](https://github.com/casey/just)
 - [uv](https://docs.astral.sh/uv/)
