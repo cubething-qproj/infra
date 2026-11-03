@@ -24,11 +24,11 @@
         overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {inherit system overlays;};
 
-        # The nightly date comes from the project template's rust-toolchain.toml,
+        # The stable version comes from the project template's rust-toolchain.toml,
         # which the sync copies downstream for local rustup builds. Only the
         # channel is read: each shell below picks its own components, which
         # keeps CI closures small.
-        rustNightlyDate = pkgs.lib.removePrefix "nightly-" (builtins.fromTOML (
+        rustVersion = (builtins.fromTOML (
           builtins.readFile ./scripts/src/qproj_scripts/assets/project-template/rust-toolchain.toml
         )).toolchain.channel;
 
@@ -37,7 +37,7 @@
           extensions,
           targets,
         }:
-          (builtins.getAttr profile pkgs.rust-bin.nightly.${rustNightlyDate}).override {
+          (builtins.getAttr profile pkgs.rust-bin.stable.${rustVersion}).override {
             inherit extensions targets;
           };
 

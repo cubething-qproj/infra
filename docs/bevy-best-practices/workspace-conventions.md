@@ -8,9 +8,9 @@
 
 ## Toolchain
 
-This workspace uses **nightly Rust**, pinned to the same nightly as the
+This workspace pins Rust to the same toolchain as the
 [Jackdaw](https://github.com/jbuehler23/jackdaw) editor (currently
-`nightly-2026-03-05`), so our builds, the editor and the editor's game build
+`1.99.0`), so our builds, the editor and the editor's game build
 use one compiler. The pin lives in `rust-toolchain.toml`:
 
 - the infra project template is the source of truth: CI's nix flake reads its
@@ -20,7 +20,7 @@ use one compiler. The pin lives in `rust-toolchain.toml`:
 When Jackdaw's pin moves, bump both copies together.
 
 There is **no MSRV** (`rust-version` is not declared). MSRV is
-meaningless under a nightly pin.
+meaningless under an exact toolchain pin.
 
 ---
 
