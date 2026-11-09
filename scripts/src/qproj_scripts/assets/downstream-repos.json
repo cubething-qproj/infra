@@ -7,5 +7,6 @@
   "cubething-qproj/q_cam",
   "cubething-qproj/q_test_harness",
   "cubething-qproj/q_query_lang",
-  "cubething-qproj/q_vn"
+  "cubething-qproj/q_vn",
+  "cubething-qproj/q_yarn"
 ]
