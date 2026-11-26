@@ -1,0 +1,29 @@
+name: Downstream publish
+
+on:
+    workflow_call:
+        secrets:
+            CARGO_REGISTRY_TOKEN:
+                description: "crates.io API token with publish-update scope."
+                required: true
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        permissions:
+            id-token: write
+            contents: read
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  submodules: recursive
+            - uses: cubething-qproj/infra/.github/actions/setup@main
+              with:
+                  cargo-cache-prefix: publish
+            - uses: nicknovitski/nix-develop@v1
+              with:
+                  arguments: .#ci
+            - name: Publish
+              env:
+                  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+              run: cargo publish --workspace --locked
